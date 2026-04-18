@@ -11,9 +11,22 @@ from app.services.auth import get_session_user
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
 
 
+def _extract_token(request: Request) -> str | None:
+    """Return the session token from either an Authorization header or cookie.
+
+    Bearer header is checked first so the CLI (which has no cookie jar) can
+    authenticate by sending `Authorization: Bearer <session_token>`.
+    """
+    auth = request.headers.get("authorization")
+    if auth:
+        scheme, _, token = auth.partition(" ")
+        if scheme.lower() == "bearer" and token:
+            return token.strip()
+    return request.cookies.get(get_settings().session_cookie_name)
+
+
 async def _resolve_current_user(request: Request, db: SessionDep) -> User:
-    settings = get_settings()
-    token = request.cookies.get(settings.session_cookie_name)
+    token = _extract_token(request)
     if not token:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

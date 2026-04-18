@@ -56,3 +56,48 @@ def test_upload_endpoint(client: TestClient) -> None:
     body = response.json()
     assert body["upload_id"]
     assert body["size"] == len(b"hello world")
+
+
+def test_bearer_token_auth(client: TestClient) -> None:
+    """The CLI sends the session token as `Authorization: Bearer ...`."""
+    # Mint a session via the same fixture path the cookie uses.
+    import asyncio
+    from datetime import UTC, datetime, timedelta
+
+    from app.db.session import SessionLocal
+    from app.models.session import Session
+    from app.models.user import User
+
+    async def _setup() -> str:
+        async with SessionLocal() as db:
+            user = User(github_id=99, login="cli-user")
+            db.add(user)
+            await db.flush()
+            session = Session(
+                token="bearer-token-xyz",
+                user_id=user.id,
+                expires_at=datetime.now(UTC) + timedelta(hours=1),
+            )
+            db.add(session)
+            await db.commit()
+            return session.token
+
+    token = asyncio.run(_setup())
+    response = client.get(
+        "/api/v1/auth/me",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["login"] == "cli-user"
+
+
+def test_stop_deployment(authed_client: TestClient) -> None:
+    create = authed_client.post(
+        "/api/v1/deployments",
+        json={"github_url": "https://github.com/foo/bar"},
+    )
+    deployment_id = create.json()["id"]
+
+    stop = authed_client.delete(f"/api/v1/deployments/{deployment_id}")
+    assert stop.status_code == 200, stop.text
+    assert stop.json()["status"] == "stopped"

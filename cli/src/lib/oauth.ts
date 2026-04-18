@@ -42,7 +42,7 @@ export async function runOAuthLogin(): Promise<string> {
 
     server.listen(0, "127.0.0.1", () => {
       const port = (server.address() as AddressInfo).port;
-      void open(`${apiUrl}/api/auth/login?cli_port=${port}`);
+      void open(`${apiUrl}/api/v1/auth/cli/login?cli_port=${port}`);
     });
   });
 }
