@@ -1,0 +1,404 @@
+================================================================================
+  dploy CLI — Final Implementation Plan
+================================================================================
+
+One-liner: Vercel-style "just deploy it" CLI. Bundles current folder (or clones
+a GitHub repo), ships to Dedalus, OpenClaw figures out the env + exposes a
+port, you get a URL in <60s.
+
+Team split:
+  Nathan  — CLI (this doc)
+  Ryan    — Agent #2 (port exposure)
+  Sam     — Agent #1 (code analysis / run commands)
+  Kaitlyn — Frontend (auth, API keys, dashboard)
+
+================================================================================
+  1. STACK
+================================================================================
+
+  Ink 5                — React for CLIs
+  @inkjs/ui            — Spinner, StatusMessage, ProgressBar, Select, Confirm
+  meow                 — arg parsing (Ink-canonical)
+  TypeScript + tsup    — zero-config bundler, ESM output, shebang preserved
+  undici               — fetch + streams
+  tar                  — tarball creation
+  ignore               — .gitignore-style matching
+  dotenv               — .env parsing (handles quotes, multiline, comments)
+  conf                 — persistent config at ~/.dploy/config.json
+  open                 — xdg-open/start for `dploy open`
+
+================================================================================
+  2. COMMANDS
+================================================================================
+
+  dploy                              → alias for `dploy deploy`
+  dploy deploy [path|github-url]
+      --env KEY=val                  repeatable, inline env vars
+      --env-file <path>              explicit env file (default: auto-detect .env)
+      --name <name>                  deployment name
+      --follow                       stay attached after ready
+
+  dploy list                         interactive table
+  dploy status <id>                  one-shot status view
+  dploy stop <id>                    teardown (with confirm)
+  dploy open <id>                    open URL in browser
+
+  dploy login                        browser OAuth flow (primary)
+  dploy login --token <key>          manual paste fallback
+  dploy logout
+  dploy whoami                       prints current user
+
+  dploy --version
+  dploy --help
+
+  Cut for MVP: `keys` commands (frontend owns), `logs` command (tail is in
+  status view anyway), `dev` watch mode, `env set/unset`.
+
+================================================================================
+  4. API ROUTES
+================================================================================
+
+  POST   /api/upload                       multipart → { uploadId, size }
+  POST   /api/deployments                  body → { deploymentId }
+  GET    /api/deployments                  → Deployment[]
+  GET    /api/deployments/:id              → Deployment (with currentStep, logs tail)
+  DELETE /api/deployments/:id              teardown
+
+  GET    /api/auth/login                   query: ?cli_port=<port> → OAuth redirect
+  GET    /api/auth/callback                OAuth callback, posts token to cli_port
+  POST   /api/auth/logout
+  GET    /api/auth/me                      → { user, org }
+
+  Auth: every authed request sends `Authorization: Bearer <token>` where
+  <token> is either an API key (from frontend) or OAuth-issued CLI token.
+
+================================================================================
+  5. SHARED CONTRACTS (lock these with team FIRST)
+================================================================================
+
+  type DeploymentStatus =
+    | "pending"         // record created
+    | "uploading"       // receiving tarball
+    | "provisioning"    // dedalus sandbox spinning up
+    | "cloning"         // git clone (github path only)
+    | "analyzing"       // Agent #1 reading files
+    | "installing"      // running install commands
+    | "starting"        // running start command
+    | "exposing"        // Agent #2 opening port
+    | "ready"           // URL live
+    | "failed"
+    | "stopped";
+
+  type Deployment = {
+    id: string;
+    name: string;
+    status: DeploymentStatus;
+    currentStep?: string;        // "Running pnpm install"
+    source: { type: "upload" | "github"; ref: string };
+    runCommand?: string;
+    ports?: { internal: number; public: string }[];
+    url?: string;
+    logs?: string[];             // tail, last ~50 lines
+    createdAt: string;
+    updatedAt: string;
+    error?: string;
+  };
+
+  type CreateDeploymentBody = {
+    source: { type: "upload"; id: string } | { type: "github"; url: string };
+    env?: Record<string, string>;
+    name?: string;
+  };
+
+  CLI polls GET /api/deployments/:id every 1s; no SSE needed.
+
+================================================================================
+  6. PROJECT STRUCTURE
+================================================================================
+
+  dploy-cli/
+    package.json
+    tsup.config.ts
+    tsconfig.json
+    bin/
+      dploy                        # shebang → dist/cli.js
+    src/
+      cli.tsx                      # meow entry, routes to command view
+      commands/
+        deploy.tsx
+        list.tsx
+        status.tsx
+        stop.tsx
+        open.ts
+        login.tsx                  # tsx because OAuth flow has Ink UI
+        logout.ts
+        whoami.tsx
+      components/
+        AppShell.tsx               # Header + body + StatusBar layout wrapper
+        Header.tsx                 # "▲ dploy" brand + command name + version
+        StatusBar.tsx              # bottom bar: user · apiUrl · elapsed
+        KeyHints.tsx               # "↑↓ nav · enter select · q quit"
+        ErrorPanel.tsx             # red bordered error box + actionable hint
+        Step.tsx                   # ✔/⠋/✖ + label + detail lines
+        StepList.tsx               # manages Step[] state
+        DeploymentSummary.tsx      # "🚀 Deployed" panel
+        StatusBadge.tsx            # colored dot + status text
+        Table.tsx                  # for list view
+        EnvSummary.tsx             # "Env variables (3): ..."
+      hooks/
+        useDeploymentPoll.ts       # polls GET /:id, derives step state
+        useAuth.ts                 # reads config, guards commands
+        useElapsed.ts              # mm:ss timer for long-running views
+      lib/
+        api.ts                     # undici wrapper, auth header, typed errors
+        config.ts                  # conf-backed ~/.dploy/config.json
+        bundle.ts                  # tar+gzip with ignore rules
+        env.ts                     # load + merge env sources
+        oauth.ts                   # local callback server + browser open
+        types.ts                   # mirror backend contracts
+        github.ts                  # isGithubUrl(), parseGithubUrl()
+
+================================================================================
+  7. DEPENDENCIES
+================================================================================
+
+  {
+    "bin": { "dploy": "./bin/dploy" },
+    "dependencies": {
+      "ink": "^5",
+      "@inkjs/ui": "^2",
+      "react": "^18",
+      "meow": "^13",
+      "undici": "^6",
+      "tar": "^7",
+      "ignore": "^5",
+      "dotenv": "^16",
+      "conf": "^13",
+      "open": "^10"
+    },
+    "devDependencies": {
+      "typescript": "^5",
+      "tsup": "^8",
+      "@types/react": "^18",
+      "@types/tar": "^6",
+      "@types/node": "^20"
+    }
+  }
+
+================================================================================
+  8. IMPLEMENTATION PHASES
+================================================================================
+
+  Total target: ~4.5 hours for a polished demo.
+  Nathan does 1–3, Ryan handles 4 + Agent #2 in parallel, polish together in 5.
+
+--------------------------------------------------------------------------------
+PHASE 1 — Scaffold + token auth (40 min)
+--------------------------------------------------------------------------------
+
+  [ ] `pnpm init`, install deps listed above
+  [ ] tsup.config.ts: ESM output, shebang preserved, target node20
+  [ ] bin/dploy → `#!/usr/bin/env node\nimport("../dist/cli.js");`
+  [ ] tsconfig.json: jsx=react-jsx, moduleResolution=bundler, strict
+  [ ] src/cli.tsx: meow parses flags + positionals, switches on first positional,
+      render(<CommandView ...props />) for the matching command
+  [ ] lib/config.ts: conf instance, schema { token?: string, apiUrl: string,
+      defaultApiUrl='https://api.dploy.dev' }
+  [ ] lib/api.ts: undici `request` wrapper, injects Authorization header,
+      throws typed ApiError { status, code, message }
+  [ ] commands/login.tsx: supports `--token` path immediately. OAuth in phase 1.5.
+  [ ] commands/logout.ts: clears token from config
+
+  CHECKPOINT: `dploy login --token foo && cat ~/.dploy/config.json` works.
+
+--------------------------------------------------------------------------------
+PHASE 1.5 — OAuth login (30 min)
+--------------------------------------------------------------------------------
+
+  lib/oauth.ts flow:
+    1. Pick random free port on 127.0.0.1 (http.createServer + listen(0))
+    2. Start local server, routes:
+         GET /callback?token=...  →  save token, respond "You can close this
+                                     window", resolve promise, shutdown server
+    3. Open browser to `${apiUrl}/api/auth/login?cli_port=${port}`
+    4. Backend does OAuth dance, on success redirects to
+       http://127.0.0.1:${port}/callback?token=...
+    5. CLI shows Ink spinner "Waiting for browser..." with 2min timeout
+    6. On token received: POST /api/auth/me to fetch user, print "Logged in as X"
+
+  CHECKPOINT: `dploy login` opens browser, completes flow, `dploy whoami` prints user.
+
+--------------------------------------------------------------------------------
+PHASE 2 — Deploy path, no Ink UI yet (50 min)
+--------------------------------------------------------------------------------
+
+  [ ] lib/github.ts: isGithubUrl(s) via regex, parseGithubUrl(s)
+  [ ] lib/bundle.ts:
+      - walk CWD recursively
+      - default ignores: node_modules, .git, dist, build, .next, out, target,
+        .venv, venv, __pycache__, .DS_Store, .env, .env.*, *.log, .dploy
+      - merge with .gitignore + .dployignore via `ignore` package
+      - tar.c({ gzip: true, cwd, filter }) → stream to os.tmpdir()/dploy-<id>.tar.gz
+      - return { path, size, fileCount }
+      - WARN if size > 50MB
+  [ ] lib/env.ts:
+      - loadEnv({ file?, inline?: string[], skipAuto?: boolean }): Record<string, string>
+      - auto-loads .env from CWD unless skipAuto
+      - dotenv.parse() for files
+      - inline "KEY=val" strings override file values
+      - throws if file path given but missing
+  [ ] commands/deploy.tsx (logic first, placeholder render):
+      1. parse args: path or github-url, --env*, --env-file, --no-env, --name
+      2. detect github vs local path
+      3. if local: bundle → POST /api/upload multipart → { uploadId }
+         if github: skip to step 5 with { type: "github", url }
+      4. env = loadEnv(...)
+      5. POST /api/deployments { source, env, name } → { deploymentId }
+      6. console.log(deploymentId); exit(0)
+
+  CHECKPOINT: `dploy deploy` uploads + creates deployment. Prove integration.
+
+--------------------------------------------------------------------------------
+PHASE 3 — Ink DeployView (70 min) ⭐ DEMO MOMENT
+--------------------------------------------------------------------------------
+
+  Spend the time here. This is what judges watch.
+
+  [ ] hooks/useDeploymentPoll.ts:
+      - takes deploymentId
+      - setInterval 1000ms, GET /api/deployments/:id
+      - reducer maps DeploymentStatus → step states:
+          status ≤ currentStep.order    → "done"
+          status === currentStep.order  → "running" (with currentStep detail)
+          status > currentStep.order    → "pending"
+          status === "failed"           → mark current as "failed"
+          status === "ready"            → transition to summary view
+      - clear interval on terminal status
+      - return { steps, deployment, phase: 'polling'|'ready'|'failed' }
+
+  [ ] components/Step.tsx:
+      - props: { state, label, details?: string[] }
+      - renders: ✔ (green) | ⠋ (cyan spinner) | ✖ (red) | ○ (gray) + label
+      - details rendered as indented "└─ ..." lines
+
+  [ ] components/StepList.tsx: maps Step[] → <Step> elements, adds elapsed timer
+
+  [ ] components/DeploymentSummary.tsx: the "🚀 Deployed" panel
+        🚀  Deployed
+
+            https://abc123.dploy.dev
+
+            agent decided:   pnpm install && pnpm dev
+            exposed port:    3000 → public
+            time to deploy:  47s
+
+            dploy stop abc123   to tear down
+            dploy open abc123   to open in browser
+
+  [ ] commands/deploy.tsx renders:
+      - <EnvSummary> (keys only) before upload
+      - <BundleProgress> during upload
+      - <StepList> during polling
+      - <DeploymentSummary> on ready
+      - <ErrorPanel> on failed
+
+  Step definitions (order matters):
+      1. "Bundle project"        → done after upload
+      2. "Upload"                → done when POST /upload returns
+      3. "Provision sandbox"     → status in ["provisioning"]
+      4. "Clone repo" (gh only)  → status in ["cloning"]
+      5. "Analyze project"       → status in ["analyzing"]
+      6. "Install dependencies"  → status in ["installing"]
+      7. "Start server"          → status in ["starting"]
+      8. "Expose port"           → status in ["exposing"]
+
+  CHECKPOINT: `dploy deploy` shows live-updating step list, ends with URL panel.
+
+--------------------------------------------------------------------------------
+PHASE 4 — Other commands (60 min, parallelizable)
+--------------------------------------------------------------------------------
+
+  [ ] commands/list.tsx:
+      - GET /api/deployments on mount
+      - <Table> with columns: status dot, name, URL, age (relative)
+      - @inkjs/ui <Select> for arrow-key nav
+      - Enter → render <DeploymentSummary> inline
+      - q to quit
+
+  [ ] commands/status.tsx:
+      - one-shot GET /api/deployments/:id
+      - render <DeploymentSummary>, exit
+
+  [ ] commands/stop.tsx:
+      - @inkjs/ui <Confirm> "Stop deployment abc123?"
+      - DELETE /api/deployments/:id
+      - render success message, exit
+
+  [ ] commands/open.ts:
+      - GET /api/deployments/:id → read url
+      - `open(url)`, exit
+
+  [ ] commands/whoami.tsx:
+      - GET /api/auth/me → print "user@example.com (org-slug)"
+
+--------------------------------------------------------------------------------
+PHASE 5 — Polish (45 min)
+--------------------------------------------------------------------------------
+
+  [ ] Error states — every command renders <ErrorPanel> with:
+      - clear message (no stack traces for user-facing errors)
+      - actionable hint ("Run `dploy login` first", "Check your network", etc.)
+      - exit code 1
+  [ ] --json flag on list/status for scripting
+  [ ] Help text — meow auto-generates from description strings; write good ones
+  [ ] useAuth guard: commands that need auth show
+      "Not logged in. Run `dploy login`." and exit instead of crashing on 401
+  [ ] Handle Ctrl-C cleanly — `useApp().exit()` in all views
+  [ ] `dploy --version` prints from package.json
+  [ ] README with a terminal GIF (asciinema → agg)
+
+================================================================================
+  9. UI SHELL (Claude-Code-style polish)
+================================================================================
+
+  Goal: every command renders inside a consistent frame so the CLI *feels*
+  like a cohesive app, not a collection of scripts. Inspired by Claude Code:
+  a subtle top brand line, the command body in the middle, a persistent
+  bottom status bar, and a key-hints line when interactive.
+
+  Layout (AppShell):
+    ▲ dploy · deploy                                              v0.0.1
+    ────────────────────────────────────────────────────────────────────
+
+    <command body>   ← Step list, summary panel, table, etc.
+
+    ────────────────────────────────────────────────────────────────────
+    ● you@example.com · acme   api.dploy.dev   elapsed 00:12
+
+  Rules:
+    - AppShell wraps every command view. One-shot commands (whoami, logout)
+      still render through it so the brand + status bar appear briefly.
+    - Header shows: brand mark, active command, version (right-aligned).
+    - StatusBar shows: auth state (● green if logged in, ○ dim if not) +
+      email/org, apiUrl (dim), elapsed timer for long-running views.
+    - KeyHints renders above the status bar only when the view takes input
+      (list view, confirm dialogs). Keep it to 3–4 hints max, dim text.
+    - ErrorPanel is a red-bordered box with "What happened:" + "Try:" hint.
+      Never show stack traces in user-facing errors.
+    - Colors: reserved green (success), red (error), cyan (active/progress).
+      Everything else dim or default. Avoid rainbow output.
+    - Spacing: body gets paddingX=1, marginY=1. Let the terminal breathe.
+    - No ASCII art banners. Brand is one char (▲) + "dploy". Restrained.
+
+  Hooks/utilities:
+    - useElapsed(): mm:ss timer, 1s tick, resets on mount
+    - useTerminalSize(): wraps ink's useStdout().columns for the divider
+
+--------------------------------------------------------------------------------
+PHASE 6 — Stretch
+--------------------------------------------------------------------------------
+
+  [ ] --follow flag keeps polling after ready, tails log tail field
+  [ ] `dploy dev` watch mode, chokidar → redeploy on file change
+  [ ] `dploy env set KEY=val` (needs new backend endpoint)
+  [ ] Framework detection hints (skip Agent #1 for Next.js, Vite) for <30s deploys
