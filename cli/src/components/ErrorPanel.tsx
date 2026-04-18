@@ -11,6 +11,7 @@ export function ErrorPanel({ message, hint }: Props) {
       borderStyle="round"
       borderColor="red"
       paddingX={1}
+      paddingY={0}
       flexDirection="column"
     >
       <Text color="red" bold>
@@ -18,10 +19,7 @@ export function ErrorPanel({ message, hint }: Props) {
       </Text>
       <Text>{message}</Text>
       {hint ? (
-        <Box marginTop={1}>
-          <Text dimColor>Try: </Text>
-          <Text>{hint}</Text>
-        </Box>
+        <Text dimColor>Try: {hint}</Text>
       ) : null}
     </Box>
   );

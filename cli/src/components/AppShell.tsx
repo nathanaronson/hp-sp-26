@@ -22,10 +22,14 @@ export function AppShell({
   return (
     <Box flexDirection="column">
       <Header command={command} />
-      <Box flexDirection="column" marginY={1} paddingX={1}>
+      <Box flexDirection="column" paddingX={1}>
         {children}
       </Box>
-      {hints && hints.length > 0 ? <KeyHints hints={hints} /> : null}
+      {hints && hints.length > 0 ? (
+        <Box paddingX={1} marginTop={1}>
+          <KeyHints hints={hints} />
+        </Box>
+      ) : null}
       <StatusBar identity={identity} showElapsed={showElapsed} />
     </Box>
   );

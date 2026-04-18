@@ -87,50 +87,45 @@ export function List() {
           <Text dimColor>
             {deployments.length} deployment{deployments.length === 1 ? "" : "s"}
           </Text>
-
-          <Box marginTop={1}>
-            {isRawModeSupported ? (
-              <Box flexDirection="column">
-                <Text bold>{formatRow("Status", "Name", "URL", "Age")}</Text>
-                <Select
-                  options={deployments.map((deployment, index) => ({
-                    value: String(index),
-                    label: formatRow(
-                      deployment.status,
-                      deployment.name,
-                      deployment.url ?? "pending",
-                      formatRelativeTime(deployment.createdAt),
-                    ),
-                  }))}
-                  visibleOptionCount={Math.min(8, deployments.length)}
-                  defaultValue={String(selectedIndex)}
-                  onChange={(value) => setSelectedIndex(Number(value))}
-                />
-              </Box>
-            ) : (
-              <Box flexDirection="column">
-                <Text bold>{formatRow("Status", "Name", "URL", "Age")}</Text>
-                {deployments.map((deployment) => (
-                  <Text key={deployment.id}>
-                    {formatRow(
-                      deployment.status,
-                      deployment.name,
-                      deployment.url ?? "pending",
-                      formatRelativeTime(deployment.createdAt),
-                    )}
-                  </Text>
-                ))}
-              </Box>
-            )}
-          </Box>
-
-          {selected ? (
-            <Box marginTop={1}>
-              <DeploymentDetails
-                deployment={selected}
-                showActions={!isRawModeSupported}
+          {isRawModeSupported ? (
+            <Box flexDirection="column">
+              <Text bold>{formatRow("Status", "Name", "URL", "Age")}</Text>
+              <Select
+                options={deployments.map((deployment, index) => ({
+                  value: String(index),
+                  label: formatRow(
+                    deployment.status,
+                    deployment.name,
+                    deployment.url ?? "pending",
+                    formatRelativeTime(deployment.createdAt),
+                  ),
+                }))}
+                visibleOptionCount={Math.min(8, deployments.length)}
+                defaultValue={String(selectedIndex)}
+                onChange={(value) => setSelectedIndex(Number(value))}
               />
             </Box>
+          ) : (
+            <Box flexDirection="column">
+              <Text bold>{formatRow("Status", "Name", "URL", "Age")}</Text>
+              {deployments.map((deployment) => (
+                <Text key={deployment.id}>
+                  {formatRow(
+                    deployment.status,
+                    deployment.name,
+                    deployment.url ?? "pending",
+                    formatRelativeTime(deployment.createdAt),
+                  )}
+                </Text>
+              ))}
+            </Box>
+          )}
+
+          {selected ? (
+            <DeploymentDetails
+              deployment={selected}
+              showActions={!isRawModeSupported}
+            />
           ) : null}
         </Box>
       )}

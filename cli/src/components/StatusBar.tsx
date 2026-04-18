@@ -16,7 +16,7 @@ export function StatusBar({ identity, showElapsed = false }: Props) {
   const apiUrl = config.get("apiUrl").replace(/^https?:\/\//, "");
 
   return (
-    <Box flexDirection="column" marginTop={1} width={width}>
+    <Box flexDirection="column" width={width}>
       <Text dimColor>{"─".repeat(width)}</Text>
       <Box paddingX={1}>
         <Text color={isAuthed ? "green" : "gray"}>●</Text>

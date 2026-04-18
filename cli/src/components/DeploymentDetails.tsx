@@ -14,14 +14,14 @@ export function DeploymentDetails({
   const port = deployment.ports?.[0];
 
   return (
-    <Box flexDirection="column" marginTop={1}>
+    <Box flexDirection="column">
       <Text bold>{deployment.name}</Text>
-      <Box marginTop={1}>
+      <Box>
         <StatusBadge status={deployment.status} />
         <Text dimColor>  {deployment.id}</Text>
       </Box>
 
-      <Box flexDirection="column" marginTop={1} marginLeft={2}>
+      <Box flexDirection="column" marginLeft={2}>
         <Text>
           source: <Text color="cyan">{deployment.source.type}</Text>
           <Text dimColor>  {deployment.source.ref}</Text>
@@ -46,7 +46,7 @@ export function DeploymentDetails({
       </Box>
 
       {deployment.error ? (
-        <Box marginTop={1} marginLeft={2}>
+        <Box marginLeft={2}>
           <Text color="red">{deployment.error}</Text>
         </Box>
       ) : null}
@@ -59,7 +59,7 @@ export function DeploymentDetails({
       ) : null}
 
       {showActions ? (
-        <Box flexDirection="column" marginTop={1} marginLeft={2}>
+        <Box flexDirection="column" marginLeft={2}>
           <Text dimColor>dploy status {deployment.id}   for more detail</Text>
           <Text dimColor>dploy stop {deployment.id}     to tear down</Text>
         </Box>

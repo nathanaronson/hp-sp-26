@@ -116,7 +116,7 @@ export function Stop({ id, yes = false }: { id: string; yes?: boolean }) {
         <Box flexDirection="column">
           <Text>Stop this deployment?</Text>
           <DeploymentDetails deployment={deployment} showActions={false} />
-          <Box marginTop={1}>
+          <Box>
             <Text dimColor>Confirm: </Text>
             <StopInput
               onCancel={() => {
