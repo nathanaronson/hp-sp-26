@@ -32,10 +32,6 @@ dist-ssr/
 *.local
 .pnpm-store/
 
-# Rust / cli
-target/
-**/*.rs.bk
-
 # Python / backend
 __pycache__/
 *.py[cod]
