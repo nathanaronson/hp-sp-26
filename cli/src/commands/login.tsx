@@ -77,7 +77,7 @@ export function Login({ token: providedToken, mock }: Props) {
     ) : phase === "done" && identity ? (
       <Box flexDirection="column">
         <Text color="green">✔ Logged in</Text>
-        <Box marginTop={1}>
+        <Box>
           <Text>{identity.user.email}</Text>
           <Text dimColor>  ({identity.org.slug})</Text>
         </Box>
@@ -89,7 +89,7 @@ export function Login({ token: providedToken, mock }: Props) {
           <Text> {phaseLabel(phase)}</Text>
         </Box>
         {phase === "waiting_for_browser" ? (
-          <Box marginTop={1} marginLeft={2}>
+          <Box marginLeft={2}>
             <Text dimColor>
               Complete the login in your browser. Times out after 2 minutes.
             </Text>

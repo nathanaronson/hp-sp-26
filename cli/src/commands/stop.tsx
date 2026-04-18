@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Box, Text, useApp, useInput, useStdin } from "ink";
-import { Spinner } from "@inkjs/ui";
+import { ConfirmInput, Spinner } from "@inkjs/ui";
 import { api } from "../lib/api.js";
 import type { Deployment } from "../lib/types.js";
 import { AppShell } from "../components/AppShell.js";
@@ -88,32 +88,11 @@ export function Stop({ id, yes = false }: { id: string; yes?: boolean }) {
           ? [
               { keys: "y", label: "confirm" },
               { keys: "n", label: "cancel" },
+              { keys: "enter", label: "default" },
             ]
           : undefined
       }
     >
-      {phase === "confirm" && deployment && isRawModeSupported ? (
-        <StopInput
-          onCancel={() => {
-            setPhase("cancelled");
-          }}
-          onConfirm={async () => {
-            try {
-              setPhase("stopping");
-              const stopped = await api<Deployment>(`/api/deployments/${id}`, {
-                method: "DELETE",
-              });
-              setResult(stopped);
-              setPhase("done");
-            } catch (err) {
-              process.exitCode = 1;
-              setError(errorMessage(err));
-              setPhase("failed");
-            }
-          }}
-        />
-      ) : null}
-
       {error ? (
         <ErrorPanel message={error} hint="Use `dploy list` to check deployment IDs before stopping." />
       ) : phase === "loading" ? (
@@ -137,6 +116,28 @@ export function Stop({ id, yes = false }: { id: string; yes?: boolean }) {
         <Box flexDirection="column">
           <Text>Stop this deployment?</Text>
           <DeploymentDetails deployment={deployment} showActions={false} />
+          <Box>
+            <Text dimColor>Confirm: </Text>
+            <StopInput
+              onCancel={() => {
+                setPhase("cancelled");
+              }}
+              onConfirm={async () => {
+                try {
+                  setPhase("stopping");
+                  const stopped = await api<Deployment>(`/api/deployments/${id}`, {
+                    method: "DELETE",
+                  });
+                  setResult(stopped);
+                  setPhase("done");
+                } catch (err) {
+                  process.exitCode = 1;
+                  setError(errorMessage(err));
+                  setPhase("failed");
+                }
+              }}
+            />
+          </Box>
         </Box>
       ) : null}
     </AppShell>
@@ -151,9 +152,17 @@ function StopInput({
   onCancel: () => void;
 }) {
   useInput((input, key) => {
-    if (input === "y") void onConfirm();
-    if (input === "n" || input === "q" || key.escape) onCancel();
+    if (input === "q" || key.escape) onCancel();
   });
 
-  return null;
+  return (
+    <ConfirmInput
+      defaultChoice="cancel"
+      submitOnEnter
+      onConfirm={() => {
+        void onConfirm();
+      }}
+      onCancel={onCancel}
+    />
+  );
 }

@@ -1,14 +1,16 @@
 import { render } from "ink";
 import meow from "meow";
 import { Deploy } from "./commands/deploy.js";
-import { List } from "./commands/list.js";
+import { List, listJson } from "./commands/list.js";
 import { Status } from "./commands/status.js";
+import { statusJson } from "./commands/status.js";
 import { Stop } from "./commands/stop.js";
 import { Login } from "./commands/login.js";
 import { Logout } from "./commands/logout.js";
 import { Whoami } from "./commands/whoami.js";
 import { openCmd } from "./commands/open.js";
 import { VERSION } from "./lib/version.js";
+import { errorMessage } from "./lib/errors.js";
 
 const HELP_TEXT = `
   ▲ dploy  v${VERSION}
@@ -40,12 +42,15 @@ const HELP_TEXT = `
     --name <name>              Override the deployment name
     --follow                   Stay attached after the deploy finishes
     --yes                      Skip confirmation for destructive commands
+    --json                     Print JSON for script-friendly commands
 
   Examples
     $ dploy
     $ dploy ./apps/web --name landing-page
     $ dploy https://github.com/acme/api --env NODE_ENV=production
     $ dploy login --mock
+    $ dploy list --json
+    $ dploy status dep_abc123 --json
     $ dploy deploy . --follow
     $ dploy stop dep_abc123 --yes
 
@@ -67,6 +72,7 @@ const cli = meow(
       name: { type: "string" },
       follow: { type: "boolean", default: false },
       yes: { type: "boolean", default: false },
+      json: { type: "boolean", default: false },
       token: { type: "string" },
       mock: { type: "boolean", default: false },
     },
@@ -91,10 +97,18 @@ switch (cmd) {
     break;
   }
   case "list":
+    if (cli.flags.json) {
+      await runJson(listJson);
+      break;
+    }
     render(<List />);
     break;
   case "status":
     requireArg(rest[0], "status <id>");
+    if (cli.flags.json) {
+      await runJson(() => statusJson(rest[0]!));
+      break;
+    }
     render(<Status id={rest[0]!} />);
     break;
   case "stop":
@@ -130,6 +144,15 @@ switch (cmd) {
 function requireArg(value: string | undefined, usage: string): void {
   if (!value) {
     console.error(`Missing argument. Usage: dploy ${usage}`);
+    process.exit(1);
+  }
+}
+
+async function runJson(fn: () => Promise<void>): Promise<void> {
+  try {
+    await fn();
+  } catch (err) {
+    console.error(errorMessage(err));
     process.exit(1);
   }
 }

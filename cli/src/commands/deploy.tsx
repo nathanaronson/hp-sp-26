@@ -200,49 +200,56 @@ export function Deploy({ target, envInline, envFile, name, follow }: Props) {
           Source: <Text color="cyan">{displayTarget}</Text>
         </Text>
         {name ? (
-          <Box marginTop={1}>
+          <Box>
             <Text>
               Name: <Text color="cyan">{name}</Text>
             </Text>
           </Box>
         ) : null}
         {bundle ? (
-          <Box marginTop={1}>
+          <Box>
             <Text dimColor>
               Bundle ready: {bundle.fileCount} files, {formatBytes(bundle.size)}
             </Text>
           </Box>
         ) : null}
         {upload ? (
-          <Box marginTop={1}>
+          <Box>
             <Text dimColor>Upload ID: {upload.uploadId}</Text>
           </Box>
         ) : null}
         {deployment ? (
-          <Box marginTop={1}>
+          <Box>
             <StatusBadge status={deployment.status} />
             <Text dimColor>  {deployment.id}</Text>
           </Box>
         ) : deploymentId ? (
-          <Box marginTop={1}>
+          <Box>
             <Text dimColor>Deployment ID: {deploymentId}</Text>
           </Box>
         ) : null}
-        <Box marginTop={1}>
-          <EnvSummary env={env} />
-        </Box>
+        <EnvSummary env={env} />
         {isLargeBundle ? (
-          <Box marginTop={1}>
+          <Box>
             <Text color="yellow">
               Large bundle warning: uploads over 50 MB may take noticeably longer.
             </Text>
           </Box>
         ) : null}
 
-        {error ? (
-          <Box flexDirection="column" marginTop={1}>
+        {!isAuthed && !error && !bundle && !upload && !deploymentId && !deployment ? (
+          <Box>
+            <Text dimColor>Checking auth…</Text>
+          </Box>
+        ) : error && !bundle && !upload && !deploymentId && !deployment ? (
+          <ErrorPanel
+            message={error}
+            hint="Use `dploy login --mock` for a local demo or try again once the API is reachable."
+          />
+        ) : error ? (
+          <Box flexDirection="column">
             <StepList steps={steps} />
-            <Box marginTop={1}>
+            <Box>
               <ErrorPanel
                 message={error}
                 hint="Use `dploy login --mock` for a local demo or try again once the API is reachable."
@@ -252,7 +259,7 @@ export function Deploy({ target, envInline, envFile, name, follow }: Props) {
         ) : phase === "ready" && deployment ? (
           <DeploymentSummary deployment={deployment} elapsedSec={elapsedSec} />
         ) : (
-          <Box flexDirection="column" marginTop={1}>
+          <Box flexDirection="column">
             <StepList steps={steps} />
           </Box>
         )}

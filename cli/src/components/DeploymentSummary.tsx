@@ -10,12 +10,12 @@ export function DeploymentSummary({
 }) {
   const port = deployment.ports?.[0];
   return (
-    <Box flexDirection="column" marginTop={1}>
+    <Box flexDirection="column">
       <Text color="green">🚀  Deployed</Text>
-      <Box marginTop={1} marginLeft={4}>
+      <Box marginLeft={2}>
         <Text>{deployment.url ?? ""}</Text>
       </Box>
-      <Box flexDirection="column" marginTop={1} marginLeft={4}>
+      <Box flexDirection="column" marginLeft={2}>
         {deployment.runCommand ? (
           <Text>agent decided:   <Text color="cyan">{deployment.runCommand}</Text></Text>
         ) : null}
@@ -26,7 +26,7 @@ export function DeploymentSummary({
           <Text>time to deploy:  {elapsedSec}s</Text>
         ) : null}
       </Box>
-      <Box flexDirection="column" marginTop={1} marginLeft={4}>
+      <Box flexDirection="column" marginLeft={2}>
         <Text dimColor>dploy stop {deployment.id}   to tear down</Text>
         <Text dimColor>dploy open {deployment.id}   to open in browser</Text>
       </Box>

@@ -1,12 +1,12 @@
 import { useEffect, useState } from "react";
 import { Box, Text, useApp, useInput, useStdin } from "ink";
-import { Spinner } from "@inkjs/ui";
+import { Select, Spinner } from "@inkjs/ui";
 import { api } from "../lib/api.js";
+import { assertAuthed } from "../lib/auth.js";
 import type { Deployment } from "../lib/types.js";
 import { AppShell } from "../components/AppShell.js";
 import { DeploymentDetails } from "../components/DeploymentDetails.js";
 import { ErrorPanel } from "../components/ErrorPanel.js";
-import { Table } from "../components/Table.js";
 import { useAuth } from "../hooks/useAuth.js";
 import { errorMessage } from "../lib/errors.js";
 import { formatRelativeTime } from "../lib/time.js";
@@ -63,23 +63,14 @@ export function List() {
       hints={
         isRawModeSupported
           ? [
-              { keys: "↑↓", label: "select" },
-              { keys: "j/k", label: "move" },
+              { keys: "↑↓", label: "browse" },
               { keys: "q", label: "quit" },
             ]
           : undefined
       }
     >
       {isRawModeSupported ? (
-        <ListInput
-          count={deployments.length}
-          onExit={exit}
-          onMove={(delta) =>
-            setSelectedIndex((current) =>
-              clampIndex(current + delta, deployments.length),
-            )
-          }
-        />
+        <ListInput onExit={exit} />
       ) : null}
 
       {error ? (
@@ -96,35 +87,45 @@ export function List() {
           <Text dimColor>
             {deployments.length} deployment{deployments.length === 1 ? "" : "s"}
           </Text>
-
-          <Box marginTop={1}>
-            <Table
-              columns={[
-                { header: "Status", width: 14, render: (row) => row.status },
-                { header: "Name", width: 22, render: (row) => row.name },
-                {
-                  header: "URL",
-                  width: 30,
-                  render: (row) => row.url ?? "pending",
-                },
-                {
-                  header: "Age",
-                  width: 10,
-                  render: (row) => formatRelativeTime(row.createdAt),
-                },
-              ]}
-              rows={deployments}
-              selectedIndex={isRawModeSupported ? selectedIndex : undefined}
-            />
-          </Box>
-
-          {selected ? (
-            <Box marginTop={1}>
-              <DeploymentDetails
-                deployment={selected}
-                showActions={!isRawModeSupported}
+          {isRawModeSupported ? (
+            <Box flexDirection="column">
+              <Text bold>{formatRow("Status", "Name", "URL", "Age")}</Text>
+              <Select
+                options={deployments.map((deployment, index) => ({
+                  value: String(index),
+                  label: formatRow(
+                    deployment.status,
+                    deployment.name,
+                    deployment.url ?? "pending",
+                    formatRelativeTime(deployment.createdAt),
+                  ),
+                }))}
+                visibleOptionCount={Math.min(8, deployments.length)}
+                defaultValue={String(selectedIndex)}
+                onChange={(value) => setSelectedIndex(Number(value))}
               />
             </Box>
+          ) : (
+            <Box flexDirection="column">
+              <Text bold>{formatRow("Status", "Name", "URL", "Age")}</Text>
+              {deployments.map((deployment) => (
+                <Text key={deployment.id}>
+                  {formatRow(
+                    deployment.status,
+                    deployment.name,
+                    deployment.url ?? "pending",
+                    formatRelativeTime(deployment.createdAt),
+                  )}
+                </Text>
+              ))}
+            </Box>
+          )}
+
+          {selected ? (
+            <DeploymentDetails
+              deployment={selected}
+              showActions={!isRawModeSupported}
+            />
           ) : null}
         </Box>
       )}
@@ -132,32 +133,41 @@ export function List() {
   );
 }
 
+export async function listJson(): Promise<void> {
+  assertAuthed();
+  const deployments = await api<Deployment[]>("/api/deployments");
+  console.log(JSON.stringify(deployments, null, 2));
+}
+
 function ListInput({
-  count,
   onExit,
-  onMove,
 }: {
-  count: number;
   onExit: () => void;
-  onMove: (delta: number) => void;
 }) {
   useInput((input, key) => {
     if (input === "q" || key.escape) {
       onExit();
-      return;
     }
-
-    if (count === 0) return;
-    if (key.upArrow || input === "k") onMove(-1);
-    if (key.downArrow || input === "j") onMove(1);
   });
 
   return null;
 }
 
-function clampIndex(value: number, count: number): number {
-  if (count <= 0) return 0;
-  if (value < 0) return count - 1;
-  if (value >= count) return 0;
-  return value;
+function formatRow(
+  status: string,
+  name: string,
+  url: string,
+  age: string,
+): string {
+  return [
+    fit(status, 12),
+    fit(name, 20),
+    fit(url, 28),
+    fit(age, 10),
+  ].join("  ");
+}
+
+function fit(value: string, width: number): string {
+  if (value.length > width) return `${value.slice(0, width - 1)}…`;
+  return value.padEnd(width, " ");
 }

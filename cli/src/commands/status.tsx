@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Box, Text, useApp, useInput, useStdin } from "ink";
 import { Spinner } from "@inkjs/ui";
 import { api } from "../lib/api.js";
+import { assertAuthed } from "../lib/auth.js";
 import type { Deployment } from "../lib/types.js";
 import { AppShell } from "../components/AppShell.js";
 import { DeploymentDetails } from "../components/DeploymentDetails.js";
@@ -66,6 +67,12 @@ export function Status({ id }: { id: string }) {
       )}
     </AppShell>
   );
+}
+
+export async function statusJson(id: string): Promise<void> {
+  assertAuthed();
+  const deployment = await api<Deployment>(`/api/deployments/${id}`);
+  console.log(JSON.stringify(deployment, null, 2));
 }
 
 function QuitInput({ onExit }: { onExit: () => void }) {
