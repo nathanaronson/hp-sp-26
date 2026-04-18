@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { api, ApiError } from "../lib/api.js";
+import { api } from "../lib/api.js";
+import { errorMessage } from "../lib/errors.js";
 import type { Deployment, DeploymentStatus } from "../lib/types.js";
 
 type Phase = "polling" | "ready" | "failed" | "stopped";
@@ -30,7 +31,7 @@ export function useDeploymentPoll(id: string | undefined, intervalMs = 1000): Po
         if (phase !== "polling") clearInterval(timer);
       } catch (err) {
         if (cancelled) return;
-        const msg = err instanceof ApiError ? err.message : String(err);
+        const msg = errorMessage(err);
         setState((s) => ({ ...s, error: msg }));
       }
     }

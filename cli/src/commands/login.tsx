@@ -3,8 +3,9 @@ import { Box, Text, useApp } from "ink";
 import { Spinner } from "@inkjs/ui";
 import { AppShell } from "../components/AppShell.js";
 import { ErrorPanel } from "../components/ErrorPanel.js";
-import { api, ApiError } from "../lib/api.js";
+import { api } from "../lib/api.js";
 import { config } from "../lib/config.js";
+import { errorMessage } from "../lib/errors.js";
 import { MOCK_TOKEN } from "../lib/mock.js";
 import { runOAuthLogin } from "../lib/oauth.js";
 import type { AuthMe } from "../lib/types.js";
@@ -56,7 +57,7 @@ export function Login({ token: providedToken, mock }: Props) {
         setTimeout(() => exit(), 400);
       } catch (err) {
         if (cancelled) return;
-        setError(err instanceof ApiError ? err.message : String(err));
+        setError(errorMessage(err));
         setPhase("failed");
         setTimeout(() => exit(), 50);
         process.exitCode = 1;

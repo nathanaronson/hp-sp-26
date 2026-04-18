@@ -9,12 +9,14 @@ export type Column<T> = {
 type Props<T> = {
   columns: Column<T>[];
   rows: T[];
+  selectedIndex?: number;
 };
 
-export function Table<T>({ columns, rows }: Props<T>) {
+export function Table<T>({ columns, rows, selectedIndex }: Props<T>) {
   return (
     <Box flexDirection="column">
       <Box>
+        {selectedIndex !== undefined ? <Box width={2} /> : null}
         {columns.map((c) => (
           <Box key={c.header} width={c.width}>
             <Text bold>{c.header}</Text>
@@ -23,9 +25,18 @@ export function Table<T>({ columns, rows }: Props<T>) {
       </Box>
       {rows.map((row, i) => (
         <Box key={i}>
+          {selectedIndex !== undefined ? (
+            <Box width={2}>
+              <Text color={selectedIndex === i ? "cyan" : undefined}>
+                {selectedIndex === i ? "›" : " "}
+              </Text>
+            </Box>
+          ) : null}
           {columns.map((c) => (
             <Box key={c.header} width={c.width}>
-              <Text>{truncate(c.render(row), c.width - 1)}</Text>
+              <Text color={selectedIndex === i ? "cyan" : undefined}>
+                {truncate(c.render(row), c.width - 1)}
+              </Text>
             </Box>
           ))}
         </Box>

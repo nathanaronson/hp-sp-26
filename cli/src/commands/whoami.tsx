@@ -3,7 +3,8 @@ import { Box, Text, useApp } from "ink";
 import { Spinner } from "@inkjs/ui";
 import { AppShell } from "../components/AppShell.js";
 import { ErrorPanel } from "../components/ErrorPanel.js";
-import { api, ApiError } from "../lib/api.js";
+import { api } from "../lib/api.js";
+import { errorMessage } from "../lib/errors.js";
 import { useAuth } from "../hooks/useAuth.js";
 import type { AuthMe } from "../lib/types.js";
 
@@ -26,7 +27,7 @@ export function Whoami() {
         setTimeout(() => exit(), 50);
       },
       (err) => {
-        setError(err instanceof ApiError ? err.message : String(err));
+        setError(errorMessage(err));
         setTimeout(() => exit(), 50);
         process.exitCode = 1;
       },

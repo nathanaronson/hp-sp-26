@@ -39,6 +39,7 @@ const HELP_TEXT = `
     --env-file <path>          Load env vars from a file
     --name <name>              Override the deployment name
     --follow                   Stay attached after the deploy finishes
+    --yes                      Skip confirmation for destructive commands
 
   Examples
     $ dploy
@@ -46,6 +47,7 @@ const HELP_TEXT = `
     $ dploy https://github.com/acme/api --env NODE_ENV=production
     $ dploy login --mock
     $ dploy deploy . --follow
+    $ dploy stop dep_abc123 --yes
 
   Tips
     - Press q to quit long-running Ink views.
@@ -64,6 +66,7 @@ const cli = meow(
       envFile: { type: "string" },
       name: { type: "string" },
       follow: { type: "boolean", default: false },
+      yes: { type: "boolean", default: false },
       token: { type: "string" },
       mock: { type: "boolean", default: false },
     },
@@ -96,7 +99,7 @@ switch (cmd) {
     break;
   case "stop":
     requireArg(rest[0], "stop <id>");
-    render(<Stop id={rest[0]!} />);
+    render(<Stop id={rest[0]!} yes={cli.flags.yes ?? false} />);
     break;
   case "open":
     requireArg(rest[0], "open <id>");

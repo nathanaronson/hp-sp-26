@@ -11,9 +11,10 @@ import { StatusBadge } from "../components/StatusBadge.js";
 import { StepList, type StepItem } from "../components/StepList.js";
 import { useAuth } from "../hooks/useAuth.js";
 import { useDeploymentPoll } from "../hooks/useDeploymentPoll.js";
-import { api, ApiError, uploadBundle } from "../lib/api.js";
+import { api, uploadBundle } from "../lib/api.js";
 import { bundleDir, type BundleResult } from "../lib/bundle.js";
 import { loadEnv } from "../lib/env.js";
+import { errorMessage } from "../lib/errors.js";
 import { isGithubUrl } from "../lib/github.js";
 import type {
   CreateDeploymentBody,
@@ -109,7 +110,7 @@ export function Deploy({ target, envInline, envFile, name, follow }: Props) {
       } catch (err) {
         if (cancelled) return;
         process.exitCode = 1;
-        setError(err instanceof ApiError ? err.message : String(err));
+        setError(errorMessage(err));
         setPhase("failed");
       } finally {
         if (bundlePath) void unlink(bundlePath).catch(() => {});
