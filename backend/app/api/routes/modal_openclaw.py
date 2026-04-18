@@ -33,7 +33,9 @@ def run(sb: modal.Sandbox, cmd: str, timeout: int = 120, stream: bool = False) -
     stderr = p.stderr.read()
     p.wait()
     if p.returncode != 0:
-        p = sb.exec("tail -n 100 /root/.openclaw/gateway.log", timeout=timeout)
+        out = sb.exec("tail -n 100 /root/.openclaw/gateway.log", timeout=timeout)
+        print(out)
+
         raise RuntimeError(f"Command failed (exit {p.returncode}):\n{stderr}")
     return stdout.strip()
 
