@@ -36,10 +36,6 @@ dist-ssr/
 frontend/src/client/
 frontend/openapi.json
 
-# Rust / cli
-target/
-**/*.rs.bk
-
 # Python / backend
 __pycache__/
 *.py[cod]

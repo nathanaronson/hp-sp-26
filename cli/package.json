@@ -1,0 +1,41 @@
+{
+  "name": "dploy",
+  "version": "0.0.1",
+  "description": "Vercel-style just-deploy-it CLI for Dedalus",
+  "type": "module",
+  "bin": {
+    "dploy": "./bin/dploy"
+  },
+  "files": [
+    "bin",
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "typecheck": "tsc --noEmit",
+    "start": "node ./bin/dploy"
+  },
+  "dependencies": {
+    "@inkjs/ui": "^2.0.0",
+    "conf": "^13.0.0",
+    "dotenv": "^16.4.0",
+    "ignore": "^5.3.0",
+    "ink": "^5.0.0",
+    "meow": "^13.2.0",
+    "open": "^10.1.0",
+    "react": "^18.3.0",
+    "tar": "^7.4.0",
+    "undici": "^6.19.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "@types/react": "^18.3.0",
+    "@types/tar": "^6.1.0",
+    "tsup": "^8.2.0",
+    "typescript": "^5.5.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
