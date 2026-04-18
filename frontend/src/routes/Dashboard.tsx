@@ -48,7 +48,7 @@ export default function Dashboard() {
             </div>
             <button
               onClick={handleSignOut}
-              className="flex items-center gap-2 text-sm text-gray-600 hover:text-gray-900"
+              className="flex items-center gap-2 text-sm text-gray-600 hover:text-gray-900 cursor-pointer"
             >
               <LogOut className="w-4 h-4" />
               Logout
@@ -63,7 +63,7 @@ export default function Dashboard() {
           <h2 className="text-2xl">Your Deployments</h2>
           <button
             onClick={() => navigate("/add")}
-            className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 transition-colors"
+            className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 transition-colors cursor-pointer"
           >
             <Plus className="w-4 h-4" />
             Add Deployment
@@ -78,7 +78,7 @@ export default function Dashboard() {
             <p className="text-gray-500 mb-4">No deployments yet</p>
             <button
               onClick={() => navigate("/add")}
-              className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg transition-colors"
+              className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg transition-colors cursor-pointer"
             >
               Deploy your first project
             </button>

@@ -48,7 +48,7 @@ export default function AddDeployment() {
           </div>
           <button
             onClick={() => navigate("/dashboard")}
-            className="flex items-center gap-2 text-sm text-gray-600 hover:text-gray-900"
+            className="flex items-center gap-2 text-sm text-gray-600 hover:text-gray-900 cursor-pointer"
           >
             <ArrowLeft className="w-4 h-4" />
             Back to Dashboard
@@ -69,24 +69,24 @@ export default function AddDeployment() {
             <div className="grid grid-cols-2 gap-4">
               <button
                 onClick={() => setDeploymentType("github")}
-                className={`p-4 border-2 rounded-lg flex flex-col items-center gap-2 transition-all ${
+                className={`p-4 border-2 rounded-lg flex flex-col items-center gap-2 transition-all cursor-pointer ${
                   deploymentType === "github"
                     ? "border-indigo-600 bg-indigo-50"
                     : "border-gray-200 hover:border-gray-300"
                 }`}
               >
-                <GithubIcon className="w-8 h-8" />
+                <GithubIcon className="w-8 h-8 stroke-[1.5]" />
                 <span>GitHub Repository</span>
               </button>
               <button
                 onClick={() => setDeploymentType("local")}
-                className={`p-4 border-2 rounded-lg flex flex-col items-center gap-2 transition-all ${
+                className={`p-4 border-2 rounded-lg flex flex-col items-center gap-2 transition-all cursor-pointer ${
                   deploymentType === "local"
                     ? "border-indigo-600 bg-indigo-50"
                     : "border-gray-200 hover:border-gray-300"
                 }`}
               >
-                <Folder className="w-8 h-8" />
+                <Folder className="w-8 h-8 stroke-[1.5]" />
                 <span>Local Project</span>
               </button>
             </div>
@@ -126,7 +126,7 @@ export default function AddDeployment() {
           <button
             onClick={handleDeploy as () => void}
             disabled={!githubUrl || deploy.isPending}
-            className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white py-3 px-4 rounded-lg transition-colors"
+            className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white py-3 px-4 rounded-lg transition-colors cursor-pointer"
           >
             {deploy.isPending ? "Deploying..." : "Deploy Project"}
           </button>

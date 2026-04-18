@@ -26,7 +26,7 @@ export default function DeploymentDetail() {
           <h2 className="text-2xl mb-4">Deployment not found</h2>
           <button
             onClick={() => navigate("/dashboard")}
-            className="text-indigo-600 hover:text-indigo-700"
+            className="text-indigo-600 hover:text-indigo-700 cursor-pointer"
           >
             Back to Dashboard
           </button>
@@ -80,7 +80,7 @@ export default function DeploymentDetail() {
           </div>
           <button
             onClick={() => navigate("/dashboard")}
-            className="flex items-center gap-2 text-sm text-gray-600 hover:text-gray-900"
+            className="flex items-center gap-2 text-sm text-gray-600 hover:text-gray-900 cursor-pointer"
           >
             <ArrowLeft className="w-4 h-4" />
             Back to Dashboard
@@ -136,7 +136,7 @@ export default function DeploymentDetail() {
                 </a>
                 <button
                   onClick={copyUrl}
-                  className="bg-white hover:bg-gray-50 border border-gray-200 px-4 py-3 rounded flex items-center gap-2 transition-colors"
+                  className="bg-white hover:bg-gray-50 border border-gray-200 px-4 py-3 rounded flex items-center gap-2 transition-colors cursor-pointer"
                 >
                   <Copy className="w-4 h-4" />
                   Copy URL
@@ -158,14 +158,14 @@ export default function DeploymentDetail() {
               <div className="flex gap-2">
                 <button
                   onClick={shareViaEmail}
-                  className="bg-white hover:bg-gray-50 border border-gray-200 px-4 py-2 rounded flex items-center gap-2 text-sm transition-colors"
+                  className="bg-white hover:bg-gray-50 border border-gray-200 px-4 py-2 rounded flex items-center gap-2 text-sm transition-colors cursor-pointer"
                 >
                   <Mail className="w-4 h-4" />
                   Email
                 </button>
                 <button
                   onClick={shareViaiMessage}
-                  className="bg-white hover:bg-gray-50 border border-gray-200 px-4 py-2 rounded flex items-center gap-2 text-sm transition-colors"
+                  className="bg-white hover:bg-gray-50 border border-gray-200 px-4 py-2 rounded flex items-center gap-2 text-sm transition-colors cursor-pointer"
                 >
                   <MessageSquare className="w-4 h-4" />
                   iMessage
