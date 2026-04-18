@@ -9,6 +9,7 @@ export function Logout() {
 
   useEffect(() => {
     config.delete("token");
+    config.delete("mock");
     setTimeout(() => exit(), 50);
   }, [exit]);
 

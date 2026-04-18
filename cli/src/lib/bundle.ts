@@ -26,6 +26,7 @@ const DEFAULT_IGNORES = [
 export type BundleResult = {
   path: string;
   size: number;
+  fileCount: number;
 };
 
 export async function bundleDir(cwd: string): Promise<BundleResult> {
@@ -39,6 +40,7 @@ export async function bundleDir(cwd: string): Promise<BundleResult> {
     tmpdir(),
     `dploy-${randomBytes(6).toString("hex")}.tar.gz`,
   );
+  let fileCount = 0;
 
   await tarCreate(
     {
@@ -48,12 +50,14 @@ export async function bundleDir(cwd: string): Promise<BundleResult> {
       filter: (path) => {
         const rel = relative(cwd, join(cwd, path));
         if (!rel || rel === ".") return true;
-        return !ig.ignores(rel);
+        const included = !ig.ignores(rel);
+        if (included) fileCount += 1;
+        return included;
       },
     },
     ["."],
   );
 
   const size = statSync(outPath).size;
-  return { path: outPath, size };
+  return { path: outPath, size, fileCount };
 }

@@ -7,8 +7,10 @@ type Schema = {
 };
 
 export const DEFAULT_API_URL = "https://api.dploy.dev";
+const configDir = process.env.DPLOY_CONFIG_DIR;
 
 export const config = new Conf<Schema>({
   projectName: "dploy",
+  cwd: configDir,
   defaults: { apiUrl: DEFAULT_API_URL },
 });

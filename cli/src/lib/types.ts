@@ -38,6 +38,15 @@ export type CreateDeploymentBody = {
   name?: string;
 };
 
+export type UploadResponse = {
+  uploadId: string;
+  size: number;
+};
+
+export type CreateDeploymentResponse = {
+  deploymentId: string;
+};
+
 export type AuthMe = {
   user: { id: string; email: string };
   org: { id: string; slug: string };

@@ -10,30 +10,54 @@ import { Whoami } from "./commands/whoami.js";
 import { openCmd } from "./commands/open.js";
 import { VERSION } from "./lib/version.js";
 
-const cli = meow(
-  `
+const HELP_TEXT = `
+  ▲ dploy  v${VERSION}
+
+  Just deploy it.
+
   Usage
-    $ dploy [command]
+    $ dploy
+    $ dploy deploy [path|github-url]
+    $ dploy <path|github-url>
 
-  Commands
-    deploy [path|github-url]   Deploy current folder or repo (default)
-    list                       Show your deployments
-    status <id>                Show a deployment
+  Core Commands
+    deploy [path|github-url]   Deploy the current folder, a local path, or GitHub repo
+    list                       Browse recent deployments
+    status <id>                Inspect one deployment
     stop <id>                  Tear down a deployment
-    open <id>                  Open a deployment URL
-    login [--token <key>]      Log in (OAuth by default)
-    login --mock               Log in as demo user (no backend required)
-    logout                     Clear saved token
-    whoami                     Show current user
+    open <id>                  Open a live deployment in the browser
 
-  Deploy options
-    --env KEY=val              Inline env var (repeatable)
-    --env-file <path>          Explicit env file
-    --name <name>              Deployment name
-    --follow                   Stay attached after ready
-  `,
+  Auth
+    login                      Browser OAuth flow
+    login --token <key>        Paste a token manually
+    login --mock               Instant demo login with seeded mock data
+    logout                     Clear saved auth + mock mode
+    whoami                     Show the active user
+
+  Deploy Flags
+    --env KEY=val              Inline env var, repeatable
+    --env-file <path>          Load env vars from a file
+    --name <name>              Override the deployment name
+    --follow                   Stay attached after the deploy finishes
+
+  Examples
+    $ dploy
+    $ dploy ./apps/web --name landing-page
+    $ dploy https://github.com/acme/api --env NODE_ENV=production
+    $ dploy login --mock
+    $ dploy deploy . --follow
+
+  Tips
+    - Press q to quit long-running Ink views.
+    - Use --follow when you want the terminal to stay attached after ready.
+    - Mock mode is the fastest way to demo the CLI without a backend.
+`;
+
+const cli = meow(
+  HELP_TEXT,
   {
     importMeta: import.meta,
+    description: false,
     version: VERSION,
     flags: {
       env: { type: "string", isMultiple: true, default: [] },
