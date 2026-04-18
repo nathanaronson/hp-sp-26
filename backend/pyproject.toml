@@ -5,8 +5,12 @@ description = "FastAPI backend"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
+    "aiosqlite>=0.20.0",
+    "dedalus-sdk>=0.1.0",
     "fastapi[standard]>=0.136.0",
     "pydantic-settings>=2.6.0",
+    "requests>=2.33.1",
+    "sqlalchemy[asyncio]>=2.0.36",
 ]
 
 [dependency-groups]
