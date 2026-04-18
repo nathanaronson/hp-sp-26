@@ -1,6 +1,6 @@
 .PHONY: help \
         install be-install fe-install \
-        dev be-dev fe-dev \
+        dev be-dev fe-dev backend frontend \
         be-run \
         test be-test \
         lint be-lint fe-lint \
@@ -21,6 +21,8 @@ help:
 	@echo "Common:"
 	@echo "  install        Install backend + frontend deps"
 	@echo "  dev            Run backend and frontend together (Ctrl-C stops both)"
+	@echo "  backend        Run only the backend dev server (alias for be-dev)"
+	@echo "  frontend       Run only the frontend dev server (alias for fe-dev)"
 	@echo "  api            Regenerate the typed API client (be-openapi -> fe-gen-api)"
 	@echo "  test           Run all tests (currently backend)"
 	@echo "  lint           Lint backend + frontend"
@@ -51,10 +53,17 @@ install: be-install fe-install
 
 dev:
 	@echo "Starting backend ($(BE_HOST):$(BE_PORT)) and frontend dev servers..."
-	@trap 'kill 0' INT TERM EXIT; \
-		$(MAKE) -s be-dev & \
-		$(MAKE) -s fe-dev & \
-		wait
+	@cd $(FE) && $(PNPM) exec concurrently \
+		--names "backend,frontend" \
+		--prefix-colors "magenta,cyan" \
+		--kill-others \
+		--handle-input \
+		"cd ../$(BE) && $(UV) run fastapi dev app/main.py --host $(BE_HOST) --port $(BE_PORT)" \
+		"$(PNPM) dev"
+
+backend: be-dev
+
+frontend: fe-dev
 
 api: be-openapi fe-gen-api
 
