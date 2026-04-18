@@ -82,3 +82,35 @@ export function useDeploy() {
     },
   });
 }
+
+// ---------- UI display helpers ----------
+
+export type DisplayStatus = "Running" | "Building" | "Failed";
+
+/** Collapse the backend's 6 statuses into the 3 the UI cares about. */
+export function displayStatus(status: string | undefined | null): DisplayStatus {
+  switch (status) {
+    case "running":
+      return "Running";
+    case "failed":
+    case "stopped":
+      return "Failed";
+    default:
+      return "Building";
+  }
+}
+
+/** Human-readable source line for a deployment ("github" or "local"). */
+export function deploymentSource(d: DeploymentRead): { type: "github" | "local"; label: string } {
+  if (d.github_url) return { type: "github", label: d.github_url };
+  return { type: "local", label: "Local upload" };
+}
+
+/** Backend stores logs as a single text blob; split into lines for the UI.
+ * `logs` is on the SQL model but isn't always in the OpenAPI schema, so we
+ * read it defensively. */
+export function deploymentLogLines(d: DeploymentRead): string[] {
+  const logs = (d as DeploymentRead & { logs?: string | null }).logs;
+  if (!logs) return [];
+  return logs.split("\n").filter((l: string) => l.length > 0);
+}
