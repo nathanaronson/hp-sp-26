@@ -1,6 +1,6 @@
 {
   "name": "@ryantanen/dploy",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "description": "Vercel-style just-deploy-it CLI. Point dploy at a GitHub repo and get a live URL.",
   "type": "module",
   "license": "MIT",
