@@ -3,14 +3,11 @@ import type { DeploymentStatus } from "../lib/types.js";
 
 const COLORS: Record<DeploymentStatus, string> = {
   pending: "gray",
-  uploading: "cyan",
   provisioning: "cyan",
-  cloning: "cyan",
   analyzing: "cyan",
-  installing: "cyan",
-  starting: "cyan",
+  building: "cyan",
   exposing: "cyan",
-  ready: "green",
+  running: "green",
   failed: "red",
   stopped: "gray",
 };

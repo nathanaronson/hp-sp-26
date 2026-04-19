@@ -5,6 +5,7 @@ import { List, listJson } from "./commands/list.js";
 import { Status } from "./commands/status.js";
 import { statusJson } from "./commands/status.js";
 import { Stop } from "./commands/stop.js";
+import { DeleteDeployment } from "./commands/delete.js";
 import { Login } from "./commands/login.js";
 import { Logout } from "./commands/logout.js";
 import { Whoami } from "./commands/whoami.js";
@@ -27,6 +28,7 @@ const HELP_TEXT = `
     list                       Browse recent deployments
     status <id>                Inspect one deployment
     stop <id>                  Tear down a deployment
+    delete <id>                Permanently delete a deployment record
     open <id>                  Open a live deployment in the browser
 
   Auth
@@ -40,7 +42,7 @@ const HELP_TEXT = `
     --env KEY=val              Inline env var, repeatable
     --env-file <path>          Load env vars from a file
     --name <name>              Override the deployment name
-    --follow                   Stay attached after the deploy finishes
+    --follow                   Auto-open the live URL when the deploy is ready
     --yes                      Skip confirmation for destructive commands
     --json                     Print JSON for script-friendly commands
 
@@ -53,10 +55,12 @@ const HELP_TEXT = `
     $ dploy status dep_abc123 --json
     $ dploy deploy . --follow
     $ dploy stop dep_abc123 --yes
+    $ dploy delete dep_abc123 --yes
 
   Tips
     - Press q to quit long-running Ink views.
-    - Use --follow when you want the terminal to stay attached after ready.
+    - Local paths deploy via their GitHub remote; uncommitted local changes are not included.
+    - Use --follow when you want the CLI to open the live app as soon as it is ready.
     - Mock mode is the fastest way to demo the CLI without a backend.
 `;
 
@@ -114,6 +118,10 @@ switch (cmd) {
   case "stop":
     requireArg(rest[0], "stop <id>");
     render(<Stop id={rest[0]!} yes={cli.flags.yes ?? false} />);
+    break;
+  case "delete":
+    requireArg(rest[0], "delete <id>");
+    render(<DeleteDeployment id={rest[0]!} yes={cli.flags.yes ?? false} />);
     break;
   case "open":
     requireArg(rest[0], "open <id>");

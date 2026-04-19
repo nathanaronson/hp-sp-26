@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Box, Text, useApp, useInput, useStdin } from "ink";
 import { Spinner } from "@inkjs/ui";
+import open from "open";
 import { api } from "../lib/api.js";
 import { assertAuthed } from "../lib/auth.js";
 import type { Deployment } from "../lib/types.js";
@@ -16,6 +17,7 @@ export function Status({ id }: { id: string }) {
   const { isAuthed } = useAuth();
   const [deployment, setDeployment] = useState<Deployment>();
   const [error, setError] = useState<string>();
+  const [showAdvanced, setShowAdvanced] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -52,13 +54,33 @@ export function Status({ id }: { id: string }) {
   return (
     <AppShell
       command={`status ${id}`}
-      hints={isRawModeSupported ? [{ keys: "q", label: "quit" }] : undefined}
+      hints={
+        isRawModeSupported
+          ? [
+              ...(deployment?.status === "running" && deployment.url
+                ? [{ keys: "o", label: "open" }]
+                : []),
+              { keys: "a", label: showAdvanced ? "hide advanced" : "advanced" },
+              { keys: "q", label: "quit" },
+            ]
+          : undefined
+      }
     >
-      {isRawModeSupported ? <QuitInput onExit={exit} /> : null}
+      {isRawModeSupported ? (
+        <QuitInput
+          deployment={deployment}
+          onExit={exit}
+          onToggleAdvanced={() => setShowAdvanced((value) => !value)}
+        />
+      ) : null}
       {error ? (
         <ErrorPanel message={error} hint="Try `dploy list` to find a valid deployment ID." />
       ) : deployment ? (
-        <DeploymentDetails deployment={deployment} showActions={false} />
+        <DeploymentDetails
+          deployment={deployment}
+          showActions={false}
+          showAdvanced={showAdvanced}
+        />
       ) : (
         <Box>
           <Spinner />
@@ -75,9 +97,27 @@ export async function statusJson(id: string): Promise<void> {
   console.log(JSON.stringify(deployment, null, 2));
 }
 
-function QuitInput({ onExit }: { onExit: () => void }) {
+function QuitInput({
+  deployment,
+  onExit,
+  onToggleAdvanced,
+}: {
+  deployment?: Deployment;
+  onExit: () => void;
+  onToggleAdvanced: () => void;
+}) {
   useInput((input, key) => {
-    if (input === "q" || key.escape) onExit();
+    if (input === "q" || key.escape) {
+      onExit();
+      return;
+    }
+    if (input === "a") {
+      onToggleAdvanced();
+      return;
+    }
+    if (input === "o" && deployment?.status === "running" && deployment.url) {
+      void open(deployment.url);
+    }
   });
 
   return null;

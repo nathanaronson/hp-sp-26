@@ -1,8 +1,0 @@
-{
-  "permissions": {
-    "allow": [
-      "Bash(cp /tmp/openapi.json /Users/nathanaronson/Repositories/github.com/personal/hp-sp-26/frontend/openapi.json)",
-      "Bash(pnpm gen:api)"
-    ]
-  }
-}

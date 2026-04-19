@@ -15,7 +15,6 @@ type Props = {
 export function AppShell({
   command,
   children,
-  identity,
   showElapsed,
   hints,
 }: Props) {
@@ -30,7 +29,7 @@ export function AppShell({
           <KeyHints hints={hints} />
         </Box>
       ) : null}
-      <StatusBar identity={identity} showElapsed={showElapsed} />
+      <StatusBar showElapsed={showElapsed} />
     </Box>
   );
 }

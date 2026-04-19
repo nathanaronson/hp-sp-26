@@ -1,13 +1,10 @@
 export type DeploymentStatus =
   | "pending"
-  | "uploading"
   | "provisioning"
-  | "cloning"
   | "analyzing"
-  | "installing"
-  | "starting"
+  | "building"
   | "exposing"
-  | "ready"
+  | "running"
   | "failed"
   | "stopped";
 
@@ -24,10 +21,23 @@ export type Deployment = {
   kind?: DeploymentKind;
   currentStep?: string;
   source: DeploymentSource;
+  runtime?: string;
+  packageManager?: string;
+  installCommands?: string[];
+  buildCommands?: string[];
   runCommand?: string;
   startCommand?: string;
+  startCommands?: { label?: string; command?: string; port_hint?: number | null }[];
+  entrypoint?: string[];
+  envRequired?: string[];
+  port?: number;
+  boundAddress?: string;
+  healthPath?: string;
+  httpStatus?: number;
   ports?: { internal: number; public: string }[];
   url?: string;
+  backendUrl?: string;
+  tunnelUrls?: Record<string, string>;
   logs?: string[];
   createdAt: string;
   updatedAt: string;
@@ -40,6 +50,7 @@ export type CreateDeploymentBody = {
     | { type: "github"; url: string };
   env?: Record<string, string>;
   name?: string;
+  model?: string;
 };
 
 export type UploadResponse = {

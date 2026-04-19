@@ -25,11 +25,15 @@ def test_create_and_get_deployment(authed_client: TestClient) -> None:
     assert body["id"]
     assert body["status"] == "pending"
     assert body["github_url"] == payload["github_url"]
+    assert body["created_at"].endswith("Z")
+    assert body["updated_at"].endswith("Z")
 
     deployment_id = body["id"]
     fetched = authed_client.get(f"/api/v1/deployments/{deployment_id}")
     assert fetched.status_code == 200
     assert fetched.json()["id"] == deployment_id
+    assert fetched.json()["created_at"].endswith("Z")
+    assert fetched.json()["updated_at"].endswith("Z")
 
 
 def test_list_deployments(authed_client: TestClient) -> None:
@@ -98,9 +102,41 @@ def test_stop_deployment(authed_client: TestClient) -> None:
     )
     deployment_id = create.json()["id"]
 
-    delete = authed_client.delete(f"/api/v1/deployments/{deployment_id}")
-    assert delete.status_code == 204
+    stop = authed_client.delete(f"/api/v1/deployments/{deployment_id}")
+    assert stop.status_code == 200, stop.text
+    assert stop.json()["status"] == "stopped"
+    assert stop.json()["sandbox_id"] is None
 
-    # Verify it's actually gone
-    get = authed_client.get(f"/api/v1/deployments/{deployment_id}")
-    assert get.status_code == 404
+
+def test_restart_stopped_deployment(authed_client: TestClient) -> None:
+    create = authed_client.post(
+        "/api/v1/deployments",
+        json={"name": "arc", "github_url": "https://github.com/foo/bar"},
+    )
+    deployment_id = create.json()["id"]
+
+    stop = authed_client.delete(f"/api/v1/deployments/{deployment_id}")
+    assert stop.status_code == 200, stop.text
+
+    start = authed_client.post(f"/api/v1/deployments/{deployment_id}/start")
+    assert start.status_code == 200, start.text
+    body = start.json()
+    assert body["id"] == deployment_id
+    assert body["status"] == "pending"
+    assert body["name"] == "arc"
+    assert body["public_url"] is None
+    assert body["error"] is None
+
+
+def test_delete_deployment_record(authed_client: TestClient) -> None:
+    create = authed_client.post(
+        "/api/v1/deployments",
+        json={"name": "arc", "github_url": "https://github.com/foo/bar"},
+    )
+    deployment_id = create.json()["id"]
+
+    deleted = authed_client.delete(f"/api/v1/deployments/{deployment_id}/record")
+    assert deleted.status_code == 204, deleted.text
+
+    fetched = authed_client.get(f"/api/v1/deployments/{deployment_id}")
+    assert fetched.status_code == 404, fetched.text

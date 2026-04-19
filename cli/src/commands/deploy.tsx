@@ -3,9 +3,9 @@ import { unlink } from "node:fs/promises";
 import { resolve } from "node:path";
 import { useEffect, useState } from "react";
 import { Box, Text, useApp, useInput, useStdin } from "ink";
+import open from "open";
 import { AppShell } from "../components/AppShell.js";
 import { DeploymentSummary } from "../components/DeploymentSummary.js";
-import { EnvSummary } from "../components/EnvSummary.js";
 import { ErrorPanel } from "../components/ErrorPanel.js";
 import { StatusBadge } from "../components/StatusBadge.js";
 import { StepList, type StepItem } from "../components/StepList.js";
@@ -15,7 +15,12 @@ import { api, uploadBundle } from "../lib/api.js";
 import { bundleDir, type BundleResult } from "../lib/bundle.js";
 import { loadEnv } from "../lib/env.js";
 import { errorMessage } from "../lib/errors.js";
-import { isGithubUrl } from "../lib/github.js";
+import {
+  detectGithubUrlFromGit,
+  isGithubUrl,
+  normalizeGithubUrl,
+} from "../lib/github.js";
+import { isMockMode } from "../lib/mock.js";
 import type {
   CreateDeploymentBody,
   CreateDeploymentResponse,
@@ -34,14 +39,15 @@ type Props = {
 
 type DeployPhase =
   | "starting"
+  | "resolving_source"
   | "bundling"
   | "uploading"
   | "creating"
   | "polling"
-  | "ready"
+  | "running"
   | "failed";
 
-const TERMINAL = new Set<DeploymentStatus>(["ready", "failed", "stopped"]);
+const TERMINAL = new Set<DeploymentStatus>(["running", "failed", "stopped"]);
 
 export function Deploy({ target, envInline, envFile, name, follow }: Props) {
   const { exit } = useApp();
@@ -58,6 +64,8 @@ export function Deploy({ target, envInline, envFile, name, follow }: Props) {
   const [deploymentId, setDeploymentId] = useState<string>();
   const [error, setError] = useState<string>();
   const [lastActiveStatus, setLastActiveStatus] = useState<DeploymentStatus>();
+  const [resolvedGithubUrl, setResolvedGithubUrl] = useState<string>();
+  const [openedUrl, setOpenedUrl] = useState<string>();
 
   const pollState = useDeploymentPoll(deploymentId, 1000);
   const deployment = pollState.deployment;
@@ -84,19 +92,33 @@ export function Deploy({ target, envInline, envFile, name, follow }: Props) {
         let source: CreateDeploymentBody["source"];
 
         if (isGithub) {
-          source = { type: "github", url: sourceTarget! };
+          const githubUrl = normalizeGithubUrl(sourceTarget!);
+          setResolvedGithubUrl(githubUrl);
+          source = { type: "github", url: githubUrl };
         } else {
-          setPhase("bundling");
-          const bundled = await bundleDir(cwd);
-          bundlePath = bundled.path;
-          if (cancelled) return;
-          setBundle(bundled);
+          setPhase("resolving_source");
+          const githubUrl = await detectGithubUrlFromGit(cwd);
+          if (githubUrl) {
+            if (cancelled) return;
+            setResolvedGithubUrl(githubUrl);
+            source = { type: "github", url: githubUrl };
+          } else if (isMockMode()) {
+            setPhase("bundling");
+            const bundled = await bundleDir(cwd);
+            bundlePath = bundled.path;
+            if (cancelled) return;
+            setBundle(bundled);
 
-          setPhase("uploading");
-          const uploaded = await uploadBundle(bundled.path);
-          if (cancelled) return;
-          setUpload(uploaded);
-          source = { type: "upload", id: uploaded.uploadId };
+            setPhase("uploading");
+            const uploaded = await uploadBundle(bundled.path);
+            if (cancelled) return;
+            setUpload(uploaded);
+            source = { type: "upload", id: uploaded.uploadId };
+          } else {
+            throw new Error(
+              "Local deploys now follow the GitHub path. No GitHub remote was found for this directory, so use `dploy deploy <github-url>` or add a GitHub remote first.",
+            );
+          }
         }
 
         setPhase("creating");
@@ -130,8 +152,8 @@ export function Deploy({ target, envInline, envFile, name, follow }: Props) {
       setLastActiveStatus(deployment.status);
     }
 
-    if (deployment.status === "ready") {
-      setPhase("ready");
+    if (deployment.status === "running") {
+      setPhase("running");
       return;
     }
 
@@ -144,7 +166,7 @@ export function Deploy({ target, envInline, envFile, name, follow }: Props) {
 
     if (deployment.status === "stopped") {
       process.exitCode = 1;
-      setError("Deployment stopped before it became ready.");
+      setError("Deployment stopped before it became live.");
       setPhase("failed");
       return;
     }
@@ -160,11 +182,41 @@ export function Deploy({ target, envInline, envFile, name, follow }: Props) {
   }, [pollState.error]);
 
   useEffect(() => {
+    if (!follow || !deployment?.url || deployment.status !== "running") return;
+    if (openedUrl === deployment.url) return;
+
+    let cancelled = false;
+    void (async () => {
+      try {
+        await open(deployment.url!);
+        if (!cancelled) setOpenedUrl(deployment.url);
+      } catch (err) {
+        if (!cancelled) {
+          process.exitCode = 1;
+          setError(errorMessage(err));
+          setPhase("failed");
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [deployment, follow, openedUrl]);
+
+  useEffect(() => {
     if (follow) return;
-    if (phase !== "ready" && phase !== "failed") return;
-    const timeout = setTimeout(() => exit(), phase === "ready" ? 1800 : 2200);
+    if (phase !== "running" && phase !== "failed") return;
+    const timeout = setTimeout(() => exit(), phase === "running" ? 1800 : 2200);
     return () => clearTimeout(timeout);
   }, [exit, follow, phase]);
+
+  useEffect(() => {
+    if (!follow) return;
+    if (phase !== "running" || !openedUrl) return;
+    const timeout = setTimeout(() => exit(), 1200);
+    return () => clearTimeout(timeout);
+  }, [exit, follow, openedUrl, phase]);
 
   const steps = buildSteps({
     bundle,
@@ -172,6 +224,7 @@ export function Deploy({ target, envInline, envFile, name, follow }: Props) {
     isGithub,
     lastActiveStatus,
     phase,
+    resolvedGithubUrl,
     upload,
   });
 
@@ -184,38 +237,38 @@ export function Deploy({ target, envInline, envFile, name, follow }: Props) {
       )
     : undefined;
   const isLargeBundle = (bundle?.size ?? 0) > 50 * 1024 * 1024;
+  const deployName = name ?? deployment?.name;
 
   return (
     <AppShell
       command="deploy"
       hints={[
         { keys: "q", label: "quit" },
-        ...(follow ? [{ keys: "esc", label: "detach" }] : []),
+        ...(deployment?.status === "running" && deployment.url
+          ? [{ keys: "o", label: "open" }]
+          : []),
       ]}
-      showElapsed={phase !== "ready" && phase !== "failed"}
+      showElapsed={phase !== "running" && phase !== "failed"}
     >
       <Box flexDirection="column">
-        {isRawModeSupported ? <QuitInput onExit={exit} /> : null}
-        <Text>
-          Source: <Text color="cyan">{displayTarget}</Text>
-        </Text>
-        {name ? (
-          <Box>
-            <Text>
-              Name: <Text color="cyan">{name}</Text>
-            </Text>
-          </Box>
+        {isRawModeSupported ? (
+          <QuitInput deployment={deployment} onExit={exit} />
         ) : null}
-        {bundle ? (
+        <Text>
+          Source: <Text color="cyan">{resolvedGithubUrl ?? displayTarget}</Text>
+        </Text>
+        {!isGithub && resolvedGithubUrl ? (
           <Box>
             <Text dimColor>
-              Bundle ready: {bundle.fileCount} files, {formatBytes(bundle.size)}
+              Resolved from local checkout {resolvedPath}. Uncommitted local changes are not included.
             </Text>
           </Box>
         ) : null}
-        {upload ? (
+        {deployName ? (
           <Box>
-            <Text dimColor>Upload ID: {upload.uploadId}</Text>
+            <Text>
+              Name: <Text color="cyan">{deployName}</Text>
+            </Text>
           </Box>
         ) : null}
         {deployment ? (
@@ -228,7 +281,6 @@ export function Deploy({ target, envInline, envFile, name, follow }: Props) {
             <Text dimColor>Deployment ID: {deploymentId}</Text>
           </Box>
         ) : null}
-        <EnvSummary env={env} />
         {isLargeBundle ? (
           <Box>
             <Text color="yellow">
@@ -256,11 +308,32 @@ export function Deploy({ target, envInline, envFile, name, follow }: Props) {
               />
             </Box>
           </Box>
-        ) : phase === "ready" && deployment ? (
-          <DeploymentSummary deployment={deployment} elapsedSec={elapsedSec} />
+        ) : phase === "running" && deployment ? (
+          <Box flexDirection="column">
+            {follow && openedUrl ? (
+              <Box>
+                <Text dimColor>Opened </Text>
+                <Text color="cyan">{openedUrl}</Text>
+              </Box>
+            ) : null}
+            <DeploymentSummary
+              deployment={deployment}
+              elapsedSec={elapsedSec}
+            />
+          </Box>
         ) : (
           <Box flexDirection="column">
-            <StepList steps={steps} />
+            {deployment ? (
+              <Box flexDirection="column" marginBottom={1}>
+                <Text>
+                  Current: <Text color="cyan">{deployment.currentStep ?? humanizeStatus(deployment.status)}</Text>
+                </Text>
+                {deployment.url ? (
+                  <Text dimColor>{deployment.url}</Text>
+                ) : null}
+              </Box>
+            ) : null}
+            <StepList steps={stripStepDetails(steps)} />
           </Box>
         )}
       </Box>
@@ -268,9 +341,21 @@ export function Deploy({ target, envInline, envFile, name, follow }: Props) {
   );
 }
 
-function QuitInput({ onExit }: { onExit: () => void }) {
+function QuitInput({
+  deployment,
+  onExit,
+}: {
+  deployment?: Deployment;
+  onExit: () => void;
+}) {
   useInput((input, key) => {
-    if (input === "q" || key.escape) onExit();
+    if (input === "q" || key.escape) {
+      onExit();
+      return;
+    }
+    if (input === "o" && deployment?.status === "running" && deployment.url) {
+      void open(deployment.url);
+    }
   });
 
   return null;
@@ -298,6 +383,7 @@ function buildSteps({
   upload,
   deployment,
   lastActiveStatus,
+  resolvedGithubUrl,
 }: {
   phase: DeployPhase;
   isGithub: boolean;
@@ -305,10 +391,24 @@ function buildSteps({
   upload?: UploadResponse;
   deployment?: Deployment;
   lastActiveStatus?: DeploymentStatus;
+  resolvedGithubUrl?: string;
 }): StepItem[] {
   const steps: StepItem[] = [];
 
   if (!isGithub) {
+    steps.push({
+      key: "resolve-source",
+      label: "Resolve GitHub source",
+      state: getResolveSourceState(phase, resolvedGithubUrl, bundle, upload),
+      details: resolvedGithubUrl
+        ? [resolvedGithubUrl, "Deploying the remote repo, not local uncommitted changes"]
+        : phase === "resolving_source"
+          ? ["Inspecting git remotes"]
+          : undefined,
+    });
+  }
+
+  if (!isGithub && !resolvedGithubUrl) {
     steps.push({
       key: "bundle",
       label: "Bundle project",
@@ -333,24 +433,27 @@ function buildSteps({
   }
 
   const remoteSteps = [
-    { key: "provisioning", label: "Provision sandbox" },
-    ...(isGithub ? [{ key: "cloning", label: "Clone repo" }] : []),
+    {
+      key: "provisioning",
+      label:
+        isGithub || resolvedGithubUrl ? "Provision sandbox + clone repo" : "Provision sandbox",
+    },
     { key: "analyzing", label: "Analyze project" },
-    { key: "installing", label: "Install dependencies" },
-    { key: "starting", label: "Start server" },
-    { key: "exposing", label: "Expose port" },
+    {
+      key: "building",
+      label: deployment?.kind === "cli" ? "Install/build CLI" : "Install/build services",
+    },
+    {
+      key: "exposing",
+      label: deployment?.kind === "cli" ? "Start browser terminal" : "Expose service",
+    },
   ] as const;
 
-  const activeKey =
-    deployment?.status && !TERMINAL.has(deployment.status)
-      ? deployment.status
-      : phase === "creating" || phase === "polling"
-        ? "provisioning"
-        : undefined;
+  const activeKey = inferActiveKey(deployment?.status, phase);
   const failureKey = inferFailureKey(deployment, lastActiveStatus);
   const activeIndex = remoteSteps.findIndex((step) => step.key === activeKey);
   const failureIndex = remoteSteps.findIndex((step) => step.key === failureKey);
-  const doneAllRemote = deployment?.status === "ready";
+  const doneAllRemote = deployment?.status === "running";
 
   remoteSteps.forEach((step, index) => {
     let state: StepItem["state"] = "pending";
@@ -380,6 +483,17 @@ function buildSteps({
   return steps;
 }
 
+function getResolveSourceState(
+  phase: DeployPhase,
+  resolvedGithubUrl: string | undefined,
+  bundle: BundleResult | undefined,
+  upload: UploadResponse | undefined,
+): StepItem["state"] {
+  if (resolvedGithubUrl || bundle || upload) return "done";
+  if (phase === "resolving_source") return "running";
+  return "pending";
+}
+
 function getBundleState(
   phase: DeployPhase,
   bundle: BundleResult | undefined,
@@ -398,36 +512,50 @@ function getUploadState(
   return "pending";
 }
 
+function inferActiveKey(
+  status: DeploymentStatus | undefined,
+  phase: DeployPhase,
+): "provisioning" | "analyzing" | "building" | "exposing" | undefined {
+  if (!status) {
+    return phase === "creating" || phase === "polling" ? "provisioning" : undefined;
+  }
+  if (status === "pending" || status === "provisioning") return "provisioning";
+  if (status === "analyzing") return "analyzing";
+  if (status === "building") return "building";
+  if (status === "exposing") return "exposing";
+  return undefined;
+}
+
 function inferFailureKey(
   deployment: Deployment | undefined,
   lastActiveStatus: DeploymentStatus | undefined,
-): DeploymentStatus | undefined {
+): "provisioning" | "analyzing" | "building" | "exposing" | undefined {
   if (deployment?.status !== "failed") return undefined;
-  if (lastActiveStatus && !TERMINAL.has(lastActiveStatus)) return lastActiveStatus;
+  if (lastActiveStatus === "provisioning") return "provisioning";
+  if (lastActiveStatus === "analyzing") return "analyzing";
+  if (lastActiveStatus === "building") return "building";
+  if (lastActiveStatus === "exposing") return "exposing";
 
   const step = deployment.currentStep?.toLowerCase() ?? "";
-  if (step.includes("clone")) return "cloning";
-  if (step.includes("install")) return "installing";
-  if (step.includes("start")) return "starting";
-  if (step.includes("expos")) return "exposing";
   if (step.includes("analy")) return "analyzing";
+  if (step.includes("install") || step.includes("build")) return "building";
+  if (step.includes("start") || step.includes("ttyd") || step.includes("tunnel") || step.includes("expos")) {
+    return "exposing";
+  }
+  if (step.includes("clone") || step.includes("sandbox")) return "provisioning";
   return "provisioning";
 }
 
 function fallbackRemoteDetail(status: string): string {
   switch (status) {
     case "provisioning":
-      return "Allocating sandbox";
-    case "cloning":
-      return "Cloning repository";
+      return "Provisioning sandbox and cloning repository";
     case "analyzing":
       return "Inspecting project files";
-    case "installing":
-      return "Installing dependencies";
-    case "starting":
-      return "Launching application";
+    case "building":
+      return "Running install and build commands";
     case "exposing":
-      return "Assigning public URL";
+      return "Bringing up a public URL";
     default:
       return "";
   }
@@ -437,4 +565,35 @@ function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function stripStepDetails(steps: StepItem[]): StepItem[] {
+  return steps.map((step) => ({
+    ...step,
+    details:
+      step.state === "failed" || step.state === "running"
+        ? step.details?.slice(0, 1)
+        : undefined,
+  }));
+}
+
+function humanizeStatus(status: DeploymentStatus): string {
+  switch (status) {
+    case "pending":
+      return "Queued";
+    case "provisioning":
+      return "Provisioning sandbox";
+    case "analyzing":
+      return "Analyzing project";
+    case "building":
+      return "Installing and building";
+    case "exposing":
+      return "Bringing up public URL";
+    case "running":
+      return "Live";
+    case "failed":
+      return "Failed";
+    case "stopped":
+      return "Stopped";
+  }
 }

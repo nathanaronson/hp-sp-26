@@ -7,11 +7,17 @@ import { StatusBadge } from "./StatusBadge.js";
 export function DeploymentDetails({
   deployment,
   showActions = true,
+  showAdvanced = false,
 }: {
   deployment: Deployment;
   showActions?: boolean;
+  showAdvanced?: boolean;
 }) {
   const port = deployment.ports?.[0];
+  const extraUrls = deployment.tunnelUrls
+    ? Object.entries(deployment.tunnelUrls).filter(([, url]) => url !== deployment.url)
+    : [];
+  const isLive = deployment.status === "running";
 
   return (
     <Box flexDirection="column">
@@ -22,26 +28,37 @@ export function DeploymentDetails({
       </Box>
 
       <Box flexDirection="column" marginLeft={2}>
-        <Text>
-          source: <Text color="cyan">{deployment.source.type}</Text>
-          <Text dimColor>  {deployment.source.ref}</Text>
-        </Text>
-        <Text dimColor>updated {formatRelativeTime(deployment.updatedAt)}</Text>
+        <Text dimColor>updated: {formatRelativeTime(deployment.updatedAt)}</Text>
         {deployment.currentStep ? (
-          <Text>current step: {deployment.currentStep}</Text>
+          <Text>latest: {deployment.currentStep}</Text>
         ) : null}
-        {deployment.status !== "ready" && deployment.url ? (
-          <Text>url: {deployment.url}</Text>
+        {deployment.url ? (
+          <Text>{isLive ? "public url" : "pending url"}: {deployment.url}</Text>
         ) : null}
-        {deployment.status !== "ready" && deployment.runCommand ? (
-          <Text>
-            run command: <Text color="cyan">{deployment.runCommand}</Text>
-          </Text>
-        ) : null}
-        {deployment.status !== "ready" && port ? (
-          <Text>
-            exposed port: {port.internal} → {port.public}
-          </Text>
+        {showAdvanced ? (
+          <>
+            <Text>
+              source: <Text color="cyan">{deployment.source.type}</Text>
+              <Text dimColor>  {deployment.source.ref}</Text>
+            </Text>
+            {deployment.runtime ? <Text>runtime: {deployment.runtime}</Text> : null}
+            {deployment.backendUrl && deployment.backendUrl !== deployment.url ? (
+              <Text>backend url: {deployment.backendUrl}</Text>
+            ) : null}
+            {deployment.runCommand ? (
+              <Text>
+                run command: <Text color="cyan">{deployment.runCommand}</Text>
+              </Text>
+            ) : null}
+            {port ? (
+              <Text>
+                exposed port: {port.internal} → {port.public}
+              </Text>
+            ) : null}
+            {extraUrls.slice(0, 3).map(([label, url]) => (
+              <Text key={label}>{label}: {url}</Text>
+            ))}
+          </>
         ) : null}
       </Box>
 
@@ -51,10 +68,11 @@ export function DeploymentDetails({
         </Box>
       ) : null}
 
-      {deployment.status === "ready" ? (
+      {deployment.status === "running" ? (
         <DeploymentSummary
           deployment={deployment}
           elapsedSec={elapsedSeconds(deployment.createdAt, deployment.updatedAt)}
+          showAdvanced={showAdvanced}
         />
       ) : null}
 
