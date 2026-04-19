@@ -15,13 +15,17 @@ export type DeploymentSource =
   | { type: "upload"; ref: string }
   | { type: "github"; ref: string };
 
+export type DeploymentKind = "web" | "cli";
+
 export type Deployment = {
   id: string;
   name: string;
   status: DeploymentStatus;
+  kind?: DeploymentKind;
   currentStep?: string;
   source: DeploymentSource;
   runCommand?: string;
+  startCommand?: string;
   ports?: { internal: number; public: string }[];
   url?: string;
   logs?: string[];

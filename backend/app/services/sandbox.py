@@ -46,10 +46,27 @@ REPO_DIR = f"{WORKSPACE_DIR}/repo"
 APP_NAME = "dploy-deployments"
 GATEWAY_PORT = 18789
 
+# Port we always reserve for the public web terminal that fronts CLI-kind
+# deployments (ttyd). Picked from TUNNELABLE_PORTS so Modal already has a
+# tunnel slot waiting for it. Web (kind=web) deployments are free to bind
+# any other port in TUNNELABLE_PORTS.
+CLI_TERMINAL_PORT = 8081
+
 # Common framework default ports — declared at sandbox creation so we can
 # open a Modal tunnel for whichever one the deployed app picks. If the agent
 # selects something exotic we fall back to "no public URL".
-TUNNELABLE_PORTS = (3000, 3001, 4000, 4321, 5000, 5173, 8000, 8080, 8081, 8501, 8888, 9000)
+TUNNELABLE_PORTS = (
+    3000, 3001, 4000, 4321, 5000, 5173,
+    8000, 8080, CLI_TERMINAL_PORT, 8501, 8888, 9000,
+)
+
+# ttyd is a tiny single-binary web terminal (xterm.js + WebSocket bridge in
+# one process). We bake the upstream x86_64 release into the image so that
+# kind=cli deployments can expose their CLI as a shareable public web
+# terminal in <100ms with no extra dependencies.
+TTYD_VERSION = "1.7.7"
+TTYD_URL = f"https://github.com/tsl0922/ttyd/releases/download/{TTYD_VERSION}/ttyd.x86_64"
+TTYD_BIN = "/usr/local/bin/ttyd"
 
 _IMAGE: modal.Image | None = None
 _APP: modal.App | None = None
@@ -182,6 +199,12 @@ def _build_image() -> modal.Image:
             f"{env_inline} cargo --version >/dev/null",
             "NPM_CONFIG_PREFIX=/root/.npm-global NPM_CONFIG_CACHE=/root/.npm-cache "
             "npm install -g openclaw@latest pnpm yarn bun",
+            # Static ttyd binary — fronts kind=cli deployments as a public
+            # web terminal. Single binary, no shared-lib deps; lives in its
+            # own layer so changes to the openclaw warmup below don't bust
+            # this 4 MB download.
+            f"curl -fsSL {TTYD_URL} -o {TTYD_BIN} && chmod +x {TTYD_BIN} "
+            f"&& {TTYD_BIN} --version >/dev/null",
             # Bake openclaw config (cached layer).
             f"{env_inline} bash -c " + json.dumps(" && ".join(config_cmds)),
             # Warm Node compile cache.
@@ -618,6 +641,113 @@ class Sandbox:
             text=False,
             timeout=timeout_s,
         )
+
+    # ------------------------------------------------------------------
+    # Public web terminal (ttyd)
+    # ------------------------------------------------------------------
+
+    def start_ttyd(
+        self,
+        argv: list[str],
+        *,
+        port: int = CLI_TERMINAL_PORT,
+        cwd: str = REPO_DIR,
+        title: str | None = None,
+        max_clients: int = 8,
+        env: dict[str, str] | None = None,
+    ) -> None:
+        """Start ttyd inside the sandbox, serving `argv` as a public web
+        terminal on `port`. Each browser connection spawns a fresh
+        subprocess (cwd=`cwd`) and gets a private interactive PTY.
+
+        This is what fronts `kind=cli` deployments — paired with
+        `tunnel(port)` it produces a single shareable HTTPS URL that anyone
+        can open and use the CLI from a clean xterm.js page, no auth, no
+        backend WebSocket hop, no React app to load.
+
+        ttyd is started under `nohup` and detached so it survives this
+        exec call. We poll its HTTP root until it answers (or 8s elapses)
+        before returning, so the tunnel URL is live by the time the
+        orchestrator hands it back to the user.
+        """
+        if not argv:
+            raise SandboxError("start_ttyd: argv must not be empty")
+
+        # Wrap the user's command in a tiny shell launcher so we can cd
+        # into the repo and inject env vars without depending on ttyd's
+        # (nonexistent) cwd flag.
+        env_lines = ""
+        if env:
+            for k, v in env.items():
+                env_lines += f"export {shlex.quote(k)}={shlex.quote(v)}\n"
+        launcher = (
+            "#!/bin/bash\n"
+            f"cd {shlex.quote(cwd)} || exit 1\n"
+            f"{env_lines}"
+            f"exec {' '.join(shlex.quote(a) for a in argv)} \"$@\"\n"
+        )
+        import base64
+        launcher_b64 = base64.b64encode(launcher.encode()).decode()
+        launcher_path = "/tmp/dploy-cli-launcher.sh"
+
+        # Build ttyd's argv as a real list so we can shlex.join() it. This
+        # eliminates the bash quoting / brace-expansion landmines we hit
+        # when --client-option values contain JSON. (Earlier we passed
+        # `theme={"foo":1}` unquoted, which bash brace-expanded into two
+        # bogus arguments and ttyd silently ran one of them as the
+        # terminal command — hence the WS 1006 close on every connection.)
+        ttyd_argv: list[str] = [
+            TTYD_BIN,
+            "--port", str(port),
+            "--interface", "0.0.0.0",
+            "--writable",
+            "--max-clients", str(max_clients),
+            "--terminal-type", "xterm-256color",
+            # Disable the cross-origin check explicitly. The default is OFF
+            # but we set it to OFF anyway in case a future release flips it.
+            "--check-origin=false",
+            "--client-option", "fontSize=13",
+            "--client-option",
+            'theme={"background":"#0b0f19","foreground":"#d1d5db"}',
+        ]
+        if title:
+            ttyd_argv += ["--client-option", f"titleFixed={title}"]
+        ttyd_argv += ["--", launcher_path]
+        ttyd_cmdline = shlex.join(ttyd_argv)
+
+        # `nohup bash -c 'exec ttyd ...'` execs ttyd in place of bash, so
+        # `$!` captures ttyd's PID directly (no fork-and-exit chain to
+        # chase). nohup ignores SIGHUP so ttyd survives this exec call
+        # returning and Modal's stream close.
+        inner = f"exec {ttyd_cmdline} >/tmp/ttyd.log 2>&1"
+        cmd = (
+            f"echo {shlex.quote(launcher_b64)} | base64 -d > {launcher_path} && "
+            f"chmod +x {launcher_path} && "
+            f"rm -f /tmp/ttyd.log /tmp/ttyd.pid; "
+            f"nohup bash -c {shlex.quote(inner)} </dev/null >/dev/null 2>&1 & "
+            f"echo $! > /tmp/ttyd.pid; "
+            # Poll the HTTP root, but ALSO assert the process is still
+            # alive — ttyd may bind the port then immediately die if its
+            # argv is malformed, and we'd otherwise return success.
+            "for i in $(seq 1 32); do "
+            "  if [ ! -d /proc/$(cat /tmp/ttyd.pid) ]; then "
+            "    echo 'ttyd exited during boot' >&2; "
+            "    tail -n 80 /tmp/ttyd.log >&2; exit 1; "
+            "  fi; "
+            f"  curl -sf http://127.0.0.1:{port}/ >/dev/null && exit 0; "
+            "  sleep 0.25; "
+            "done; "
+            "echo 'ttyd did not come up in time' >&2; "
+            "tail -n 80 /tmp/ttyd.log >&2; exit 1"
+        )
+        log.info(
+            "start_ttyd: port=%d cwd=%s argv=%s title=%r cmdline=%s",
+            port, cwd, argv, title, _short(ttyd_cmdline, 300),
+        )
+        t0 = time.perf_counter()
+        self.check_exec(cmd, timeout_s=20)
+        log.info("ttyd up on :%d in %dms",
+                 port, int((time.perf_counter() - t0) * 1000))
 
     # ------------------------------------------------------------------
     # Public ingress

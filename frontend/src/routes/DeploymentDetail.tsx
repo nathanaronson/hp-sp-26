@@ -146,7 +146,8 @@ export default function DeploymentDetail() {
               <span>{status === "Running" ? "Your CLI is ready" : "Preparing your CLI"}</span>
             </div>
             <div className="text-sm text-gray-700 mb-2">
-              This deployment is terminal-first. Open the terminal URL to interact with it in the browser.
+              This deployment is terminal-first. Anyone with the URL below can use the CLI from
+              their browser — no login required.
             </div>
             {liveUrl && (
               <div className="mb-4">

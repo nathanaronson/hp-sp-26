@@ -22,6 +22,8 @@ export type BackendDeployment = {
   github_url: string | null;
   upload_id: string | null;
   status: string;
+  kind?: string | null;
+  start_command?: string | null;
   run_commands: string[] | null;
   env_required: string[] | null;
   exposed_ports: number[] | null;
@@ -58,14 +60,17 @@ export function adaptDeployment(d: BackendDeployment): Deployment {
     public: d.public_url ?? `:${p}`,
   }));
 
+  const kind = d.kind === "cli" ? "cli" : d.kind === "web" ? "web" : undefined;
   return {
     id: d.id,
     name: d.name ?? d.id,
     status,
+    kind,
     source: d.github_url
       ? { type: "github", ref: stripGithubPrefix(d.github_url) }
       : { type: "upload", ref: d.upload_id ?? "?" },
     runCommand: d.run_commands?.join(" && "),
+    startCommand: d.start_command ?? undefined,
     ports,
     url: d.public_url ?? undefined,
     error: d.error ?? undefined,

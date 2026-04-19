@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import shlex
 import time
 from contextlib import contextmanager
 from typing import Any
@@ -49,6 +50,7 @@ from app.models.deployment import (
     AgentRun,
     Deployment,
 )
+from app.services import sandbox_pool
 from app.services.agents import (
     ANALYZE_REPORT_PATH,
     ANALYZE_SYSTEM,
@@ -58,10 +60,12 @@ from app.services.agents import (
     render_expose_user,
 )
 from app.services.agents.heuristics import try_synthesize_plan
-from app.services.sandbox import REPO_DIR, Sandbox, SandboxError
-from app.services import sandbox_pool
-
-import shlex
+from app.services.sandbox import (
+    CLI_TERMINAL_PORT,
+    REPO_DIR,
+    Sandbox,
+    SandboxError,
+)
 
 log = logging.getLogger(__name__)
 
@@ -109,8 +113,9 @@ def _short(value: Any, limit: int = 200) -> str:
     return s
 
 
-def _cli_terminal_url(deployment_id: str) -> str:
-    """Frontend route that hosts the browser terminal for CLI deployments."""
+def _frontend_terminal_url(deployment_id: str) -> str:
+    """Authenticated in-app terminal route. Useful for the deployment owner
+    when they want to pass extra args; not the shareable public link."""
     base = get_settings().frontend_url.rstrip("/")
     return f"{base}/deployment/{deployment_id}/terminal"
 
@@ -492,16 +497,16 @@ async def run_deployment(deployment_id: str) -> None:
         )
 
         # ------------------------------------------------------------------
-        # 3a. CLI kind — skip Agent #2, just run install/build, mark running.
-        # The browser terminal spawns the binary on demand.
+        # 3a. CLI kind — skip Agent #2. Run install/build, then expose the
+        # CLI as a public web terminal via ttyd inside the sandbox + a
+        # Modal tunnel. The deployment's public_url becomes a shareable
+        # HTTPS link to a clean xterm.js page wired straight to the binary.
         # ------------------------------------------------------------------
         if kind == "cli":
-            terminal_url = _cli_terminal_url(deployment_id)
             await _update_deployment(deployment_id, status=DEPLOYMENT_STATUS_BUILDING)
             await _append_log(
                 deployment_id,
-                "CLI deployment: running install/build commands directly "
-                "(no server to expose)...",
+                "CLI deployment: running install/build commands...",
             )
             try:
                 with _step(dlog, "cli install+build"):
@@ -517,24 +522,74 @@ async def run_deployment(deployment_id: str) -> None:
                 dlog.warning("cli install/build failed: %s", _short(e, 300))
                 return
 
+            if not entrypoint:
+                err = (
+                    "CLI deployment has no start_command/entrypoint, can't "
+                    "front a web terminal."
+                )
+                await _update_deployment(
+                    deployment_id,
+                    status=DEPLOYMENT_STATUS_FAILED,
+                    error=err,
+                )
+                await _append_log(deployment_id, f"ERROR: {err}")
+                return
+
+            await _update_deployment(deployment_id, status=DEPLOYMENT_STATUS_EXPOSING)
+            await _append_log(
+                deployment_id,
+                f"Starting public web terminal (ttyd) on :{CLI_TERMINAL_PORT}...",
+            )
+            try:
+                with _step(dlog, "start ttyd", port=CLI_TERMINAL_PORT):
+                    await asyncio.to_thread(
+                        sb.start_ttyd,
+                        entrypoint,
+                        port=CLI_TERMINAL_PORT,
+                        cwd=REPO_DIR,
+                        title=f"{name} · dploy",
+                    )
+            except SandboxError as e:
+                err = f"ttyd start failed: {_short(e, 300)}"
+                await _update_deployment(
+                    deployment_id,
+                    status=DEPLOYMENT_STATUS_FAILED,
+                    error=err,
+                )
+                await _append_log(deployment_id, f"ERROR: {err}")
+                return
+
+            with _step(dlog, "open tunnel", port=CLI_TERMINAL_PORT):
+                public_url = await asyncio.to_thread(sb.tunnel, CLI_TERMINAL_PORT)
+            if not public_url:
+                # Fall back to the in-app terminal URL so the owner at
+                # least has a way in. Not shareable, but better than
+                # nothing.
+                public_url = _frontend_terminal_url(deployment_id)
+                await _append_log(
+                    deployment_id,
+                    f"WARNING: no Modal tunnel for :{CLI_TERMINAL_PORT}; "
+                    f"falling back to authenticated in-app terminal: {public_url}",
+                )
+
             await _update_deployment(
                 deployment_id,
                 status=DEPLOYMENT_STATUS_RUNNING,
-                port=None,
-                bound_address=None,
-                health_path=None,
-                http_status=None,
-                exposed_ports=[],
-                public_url=terminal_url,
+                port=CLI_TERMINAL_PORT,
+                bound_address=f"0.0.0.0:{CLI_TERMINAL_PORT}",
+                health_path="/",
+                http_status=200,
+                exposed_ports=[CLI_TERMINAL_PORT],
+                public_url=public_url,
             )
             elapsed = int((time.perf_counter() - overall_t0) * 1000)
             dlog.info(
-                "CLI DEPLOYMENT READY in %dms: entrypoint=%s terminal_url=%s",
-                elapsed, entrypoint, terminal_url,
+                "CLI DEPLOYMENT READY in %dms: entrypoint=%s public_url=%s",
+                elapsed, entrypoint, public_url,
             )
             await _append_log(
                 deployment_id,
-                f"CLI READY ({elapsed/1000:.1f}s total) — terminal URL: {terminal_url}",
+                f"CLI READY ({elapsed/1000:.1f}s total) — public terminal: {public_url}",
             )
             await _append_log(
                 deployment_id,
