@@ -3,7 +3,7 @@ import { api } from "../lib/api.js";
 import { errorMessage } from "../lib/errors.js";
 import type { Deployment, DeploymentStatus } from "../lib/types.js";
 
-type Phase = "polling" | "ready" | "failed" | "stopped";
+type Phase = "polling" | "running" | "failed" | "stopped";
 
 type PollState = {
   deployment?: Deployment;
@@ -11,7 +11,7 @@ type PollState = {
   error?: string;
 };
 
-const TERMINAL: DeploymentStatus[] = ["ready", "failed", "stopped"];
+const TERMINAL: DeploymentStatus[] = ["running", "failed", "stopped"];
 
 export function useDeploymentPoll(id: string | undefined, intervalMs = 1000): PollState {
   const [state, setState] = useState<PollState>({ phase: "polling" });

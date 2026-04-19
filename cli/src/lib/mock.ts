@@ -43,7 +43,7 @@ const SEEDED_DEPLOYMENTS: Deployment[] = [
   {
     id: "dep_abc123",
     name: "marketing-site",
-    status: "ready",
+    status: "running",
     source: { type: "github", ref: "acme/marketing-site" },
     runCommand: "pnpm install && pnpm dev",
     ports: [{ internal: 3000, public: "https://abc123.dploy.dev" }],
@@ -64,8 +64,8 @@ const SEEDED_DEPLOYMENTS: Deployment[] = [
   {
     id: "dep_ghi789",
     name: "worker",
-    status: "starting",
-    currentStep: "Launching pnpm start",
+    status: "exposing",
+    currentStep: "Opening public tunnel",
     source: { type: "github", ref: "acme/worker" },
     runCommand: "pnpm start",
     createdAt: new Date(Date.now() - 1000 * 30).toISOString(),
@@ -109,6 +109,16 @@ export function mockResponse(
     const id = idMatch[1]!;
     if (method === "GET") return getMockDeployment(id);
     if (method === "DELETE") return stopMockDeployment(id);
+  }
+
+  const startMatch = path.match(/^\/api\/deployments\/([^/]+)\/start$/);
+  if (startMatch && method === "POST") {
+    return startMockDeployment(startMatch[1]!);
+  }
+
+  const deleteMatch = path.match(/^\/api\/deployments\/([^/]+)\/record$/);
+  if (deleteMatch && method === "DELETE") {
+    return deleteMockDeployment(deleteMatch[1]!);
   }
 
   return undefined;
@@ -208,6 +218,42 @@ function stopMockDeployment(id: string): Deployment {
   };
 }
 
+function startMockDeployment(id: string): Deployment {
+  const runtime = mockDeployments.get(id);
+  if (runtime) {
+    runtime.stoppedAt = undefined;
+    runtime.createdAt = Date.now();
+    return materializeDeployment(runtime);
+  }
+
+  const seeded = SEEDED_DEPLOYMENTS.find((deployment) => deployment.id === id);
+  if (seeded) {
+    return {
+      ...seeded,
+      status: "pending",
+      currentStep: undefined,
+      error: undefined,
+      url: undefined,
+      ports: undefined,
+      updatedAt: new Date().toISOString(),
+    };
+  }
+
+  return {
+    id,
+    name: id,
+    status: "pending",
+    source: { type: "upload", ref: "upl_mock" },
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+}
+
+function deleteMockDeployment(id: string): undefined {
+  mockDeployments.delete(id);
+  return undefined;
+}
+
 function materializeDeployment(state: MockDeploymentState): Deployment {
   const steps = buildSequence(state.source.type === "github");
   const createdAtIso = new Date(state.createdAt).toISOString();
@@ -224,7 +270,7 @@ function materializeDeployment(state: MockDeploymentState): Deployment {
   }
 
   const elapsedMs = Date.now() - state.createdAt;
-  const failIndex = steps.findIndex((step) => step.status === "installing");
+  const failIndex = steps.findIndex((step) => step.status === "building");
   const failAtMs =
     failIndex >= 0
       ? steps.slice(0, failIndex + 1).reduce((sum, step) => sum + step.durationMs, 0)
@@ -235,7 +281,7 @@ function materializeDeployment(state: MockDeploymentState): Deployment {
       id: state.id,
       name: state.name,
       status: "failed",
-      currentStep: "Install dependencies",
+      currentStep: "Running install and build commands",
       source: state.source,
       createdAt: createdAtIso,
       updatedAt: new Date(state.createdAt + failAtMs).toISOString(),
@@ -259,20 +305,20 @@ function materializeDeployment(state: MockDeploymentState): Deployment {
     }
   }
 
-  const readyAtMs = state.createdAt + cumulativeMs;
+  const runningAtMs = state.createdAt + cumulativeMs;
   const host = `${state.id.slice(-6)}.dploy.dev`;
 
   return {
     id: state.id,
     name: state.name,
-    status: "ready",
+    status: "running",
     source: state.source,
     runCommand:
       state.source.type === "github" ? "pnpm install && pnpm dev" : "npm install && npm run start",
     ports: [{ internal: 3000, public: `https://${host}` }],
     url: `https://${host}`,
     createdAt: createdAtIso,
-    updatedAt: new Date(readyAtMs).toISOString(),
+    updatedAt: new Date(runningAtMs).toISOString(),
   };
 }
 
@@ -280,20 +326,10 @@ function buildSequence(isGithub: boolean): StepSpec[] {
   return [
     {
       status: "provisioning",
-      label: "Provision sandbox",
+      label: "Provision sandbox + clone repo",
       detail: "Allocating a fresh sandbox",
       durationMs: 900,
     },
-    ...(isGithub
-      ? [
-          {
-            status: "cloning" as const,
-            label: "Clone repo",
-            detail: "Cloning repository",
-            durationMs: 1100,
-          },
-        ]
-      : []),
     {
       status: "analyzing",
       label: "Analyze project",
@@ -301,21 +337,15 @@ function buildSequence(isGithub: boolean): StepSpec[] {
       durationMs: 1200,
     },
     {
-      status: "installing",
-      label: "Install dependencies",
-      detail: "Running install command",
-      durationMs: 1500,
-    },
-    {
-      status: "starting",
-      label: "Start server",
-      detail: "Launching detected start command",
+      status: "building",
+      label: "Install/build services",
+      detail: "Running install and build commands",
       durationMs: 1100,
     },
     {
       status: "exposing",
-      label: "Expose port",
-      detail: "Configuring public URL",
+      label: "Expose service",
+      detail: isGithub ? "Opening public tunnel" : "Configuring public URL",
       durationMs: 900,
     },
   ];

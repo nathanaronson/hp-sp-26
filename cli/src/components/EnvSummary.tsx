@@ -6,7 +6,7 @@ export function EnvSummary({ env }: { env: Record<string, string> }) {
   return (
     <Box>
       <Text dimColor>
-        Env variables ({keys.length}): {keys.join(", ")}
+        Env flags noted locally ({keys.length}; backend does not apply them yet): {keys.join(", ")}
       </Text>
     </Box>
   );

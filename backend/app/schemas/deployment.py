@@ -1,7 +1,18 @@
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_serializer, model_validator
+
+
+def _utc_isoformat(value: datetime) -> str:
+    dt = value.replace(tzinfo=UTC) if value.tzinfo is None else value.astimezone(UTC)
+    return dt.isoformat().replace("+00:00", "Z")
+
+
+class UTCReadModel(BaseModel):
+    @field_serializer("created_at", "updated_at", when_used="json", check_fields=False)
+    def _serialize_dt(self, value: datetime) -> str:
+        return _utc_isoformat(value)
 
 
 class DeploymentCreate(BaseModel):
@@ -29,7 +40,7 @@ class DeploymentCreate(BaseModel):
         return self
 
 
-class AgentRunRead(BaseModel):
+class AgentRunRead(UTCReadModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: str
@@ -54,7 +65,7 @@ class AgentRunDetail(AgentRunRead):
     transcript: list[dict[str, Any]] | None
 
 
-class DeploymentRead(BaseModel):
+class DeploymentRead(UTCReadModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: str

@@ -205,6 +205,12 @@ Pick the command a human would run locally for each service:
   Docker:    flag runtime="docker" and put `docker build && docker run`
              commands in install_commands and start_commands respectively.
 
+For Java projects, do not assume system Maven or Gradle are installed.
+Prefer repo-local wrappers when present:
+  - use `./mvnw ...` instead of `mvn ...`
+  - use `./gradlew ...` instead of `gradle ...`
+Only use bare `mvn` or `gradle` if the repo clearly documents that requirement.
+
 CRITICAL: every start command that serves HTTP MUST bind to 0.0.0.0, not
 127.0.0.1. If the framework doesn't accept a host flag, set the appropriate
 env var (HOST, HOSTNAME, BIND_ADDR — depends on the framework) in the

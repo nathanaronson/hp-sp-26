@@ -30,6 +30,7 @@ import asyncio
 import logging
 import shlex
 import time
+import re
 from contextlib import contextmanager
 from typing import Any
 
@@ -214,6 +215,44 @@ def _clone_into_sync(sb: Sandbox, github_url: str) -> None:
     except Exception:
         sb.terminate()
         raise
+
+
+def _repo_has(sb: Sandbox, relative_path: str) -> bool:
+    res = sb.exec(
+        f"test -f {shlex.quote(relative_path)}",
+        cwd=REPO_DIR,
+        timeout_s=10,
+        stdout_limit=1_000,
+        stderr_limit=1_000,
+    )
+    return res.ok()
+
+
+def _normalize_build_command(sb: Sandbox, command: str) -> str:
+    normalized = command.strip()
+    if not normalized:
+        return normalized
+
+    if _repo_has(sb, "mvnw"):
+        normalized = re.sub(r"(^|&&\s*)mvn(?=\s|$)", r"\1./mvnw", normalized)
+
+    if _repo_has(sb, "gradlew"):
+        normalized = re.sub(r"(^|&&\s*)gradle(?=\s|$)", r"\1./gradlew", normalized)
+
+    return normalized
+
+
+def _normalize_plan_commands(sb: Sandbox, plan: dict[str, Any]) -> dict[str, Any]:
+    plan = dict(plan)
+    plan["install_commands"] = [
+        _normalize_build_command(sb, cmd)
+        for cmd in plan.get("install_commands") or []
+    ]
+    plan["build_commands"] = [
+        _normalize_build_command(sb, cmd)
+        for cmd in plan.get("build_commands") or []
+    ]
+    return plan
 
 
 def _run_install_sync(sb: Sandbox, plan: dict[str, Any]) -> None:
@@ -454,6 +493,7 @@ async def run_deployment(deployment_id: str) -> None:
             dlog.warning("agent #1 reported failure: %s", _short(err, 300))
             return
 
+        plan = await asyncio.to_thread(_normalize_plan_commands, sb, plan)
         install_cmds = plan.get("install_commands") or []
         build_cmds = plan.get("build_commands") or []
         kind = plan.get("kind") or "web"
@@ -837,18 +877,12 @@ async def run_deployment(deployment_id: str) -> None:
 # Teardown — used by the DELETE route.
 # ---------------------------------------------------------------------------
 
-async def teardown_deployment(deployment_id: str) -> None:
+async def teardown_sandbox(
+    sandbox_id: str,
+    *,
+    deployment_id: str = "?",
+) -> None:
     dlog = _logger_for(deployment_id)
-    async with SessionLocal() as db:
-        dep = await db.get(Deployment, deployment_id)
-        if dep is None:
-            dlog.warning("teardown: deployment row not found")
-            return
-        if not dep.sandbox_id:
-            dlog.info("teardown: no sandbox to terminate (never provisioned)")
-            return
-        sandbox_id = dep.sandbox_id
-
     dlog.info("teardown: terminating sandbox %s", sandbox_id)
 
     def _terminate() -> None:
@@ -864,4 +898,19 @@ async def teardown_deployment(deployment_id: str) -> None:
               sandbox_id, int((time.perf_counter() - t0) * 1000))
 
 
-__all__ = ["run_deployment", "teardown_deployment", "DEFAULT_MODEL"]
+async def teardown_deployment(deployment_id: str) -> None:
+    dlog = _logger_for(deployment_id)
+    async with SessionLocal() as db:
+        dep = await db.get(Deployment, deployment_id)
+        if dep is None:
+            dlog.warning("teardown: deployment row not found")
+            return
+        if not dep.sandbox_id:
+            dlog.info("teardown: no sandbox to terminate (never provisioned)")
+            return
+        sandbox_id = dep.sandbox_id
+
+    await teardown_sandbox(sandbox_id, deployment_id=deployment_id)
+
+
+__all__ = ["run_deployment", "teardown_deployment", "teardown_sandbox", "DEFAULT_MODEL"]

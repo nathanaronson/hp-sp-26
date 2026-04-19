@@ -17,8 +17,9 @@ The Modal SDK is synchronous; async callers should wrap in
 Image content
 -------------
 Debian + curl/git + Node 22 + global pnpm/yarn/bun + Python 3 + Go +
-OpenClaw (npm-installed globally, config baked in for gateway + LLM keys).
-The model is set at runtime, not baked, so it can change per deployment.
+OpenJDK + Maven + OpenClaw (npm-installed globally, config baked in for
+gateway + LLM keys). The model is set at runtime, not baked, so it can
+change per deployment.
 """
 
 from __future__ import annotations
@@ -189,6 +190,8 @@ def _build_image() -> modal.Image:
             "python3-pip",
             "python3-venv",
             "golang-go",
+            "default-jdk",
+            "maven",
         )
         .run_commands("curl -fsSL https://deb.nodesource.com/setup_22.x | bash -")
         .apt_install("nodejs")

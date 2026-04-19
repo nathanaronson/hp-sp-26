@@ -5,6 +5,8 @@ from sqlalchemy import func, select
 
 from app.api.deps import CurrentUser, SessionDep
 from app.models.deployment import (
+    DEPLOYMENT_STATUS_FAILED,
+    DEPLOYMENT_STATUS_PENDING,
     DEPLOYMENT_STATUS_STOPPED,
     AgentRun,
     Deployment,
@@ -17,7 +19,7 @@ from app.schemas.deployment import (
     DeploymentList,
     DeploymentRead,
 )
-from app.services.deploy import run_deployment, teardown_deployment
+from app.services.deploy import run_deployment, teardown_sandbox
 
 log = logging.getLogger(__name__)
 
@@ -120,13 +122,95 @@ async def stop_deployment(
     deployment = await session.get(Deployment, deployment_id)
     if deployment is None or deployment.user_id != current_user.id:
         raise HTTPException(status_code=404, detail="Deployment not found")
+    sandbox_id = deployment.sandbox_id
     deployment.status = DEPLOYMENT_STATUS_STOPPED
+    deployment.sandbox_id = None
+    deployment.port = None
+    deployment.bound_address = None
+    deployment.health_path = None
+    deployment.http_status = None
+    deployment.exposed_ports = None
+    deployment.public_url = None
+    deployment.backend_url = None
+    deployment.tunnel_urls = None
     await session.commit()
     await session.refresh(deployment)
     log.info(
         "DELETE /deployments/%s: marked stopped (user=%s, sandbox=%s)",
-        deployment_id, current_user.id, deployment.sandbox_id,
+        deployment_id, current_user.id, sandbox_id,
     )
-    if deployment.sandbox_id:
-        background_tasks.add_task(teardown_deployment, deployment.id)
+    if sandbox_id:
+        background_tasks.add_task(teardown_sandbox, sandbox_id, deployment_id=deployment.id)
     return deployment
+
+
+@router.post("/{deployment_id}/start", response_model=DeploymentRead)
+async def start_deployment(
+    deployment_id: str,
+    session: SessionDep,
+    current_user: CurrentUser,
+    background_tasks: BackgroundTasks,
+) -> Deployment:
+    deployment = await session.get(Deployment, deployment_id)
+    if deployment is None or deployment.user_id != current_user.id:
+        raise HTTPException(status_code=404, detail="Deployment not found")
+    if deployment.status not in {DEPLOYMENT_STATUS_STOPPED, DEPLOYMENT_STATUS_FAILED}:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Deployment is already active (status: {deployment.status})",
+        )
+
+    deployment.status = DEPLOYMENT_STATUS_PENDING
+    deployment.sandbox_id = None
+    deployment.kind = "web"
+    deployment.entrypoint = None
+    deployment.runtime = None
+    deployment.package_manager = None
+    deployment.install_commands = None
+    deployment.build_commands = None
+    deployment.start_command = None
+    deployment.start_commands = None
+    deployment.run_commands = None
+    deployment.env_required = None
+    deployment.port = None
+    deployment.bound_address = None
+    deployment.health_path = None
+    deployment.http_status = None
+    deployment.exposed_ports = None
+    deployment.public_url = None
+    deployment.backend_url = None
+    deployment.tunnel_urls = None
+    deployment.logs = None
+    deployment.error = None
+    await session.commit()
+    await session.refresh(deployment)
+
+    log.info(
+        "POST /deployments/%s/start: restarting (user=%s, github_url=%s, upload_id=%s)",
+        deployment_id, current_user.id, deployment.github_url, deployment.upload_id,
+    )
+    background_tasks.add_task(run_deployment, deployment.id)
+    return deployment
+
+
+@router.delete("/{deployment_id}/record", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_deployment_record(
+    deployment_id: str,
+    session: SessionDep,
+    current_user: CurrentUser,
+    background_tasks: BackgroundTasks,
+) -> None:
+    deployment = await session.get(Deployment, deployment_id)
+    if deployment is None or deployment.user_id != current_user.id:
+        raise HTTPException(status_code=404, detail="Deployment not found")
+
+    sandbox_id = deployment.sandbox_id
+    await session.delete(deployment)
+    await session.commit()
+
+    log.info(
+        "DELETE /deployments/%s/record: deleted record (user=%s, sandbox=%s)",
+        deployment_id, current_user.id, sandbox_id,
+    )
+    if sandbox_id:
+        background_tasks.add_task(teardown_sandbox, sandbox_id, deployment_id=deployment_id)
