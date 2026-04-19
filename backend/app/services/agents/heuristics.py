@@ -52,7 +52,7 @@ def try_synthesize_plan(sb: Sandbox) -> dict[str, Any] | None:
         plan = _try_node(sb, names)
         if plan is not None:
             log.info("heuristic: synthesized node plan: %s",
-                     plan.get("start_command"))
+                     plan.get("start_commands"))
             return plan
 
     # Try Python.
@@ -60,7 +60,7 @@ def try_synthesize_plan(sb: Sandbox) -> dict[str, Any] | None:
         plan = _try_python(sb, names)
         if plan is not None:
             log.info("heuristic: synthesized python plan: %s",
-                     plan.get("start_command"))
+                     plan.get("start_commands"))
             return plan
 
     # Try Go.
@@ -68,7 +68,7 @@ def try_synthesize_plan(sb: Sandbox) -> dict[str, Any] | None:
         plan = _try_go(sb, names)
         if plan is not None:
             log.info("heuristic: synthesized go plan: %s",
-                     plan.get("start_command"))
+                     plan.get("start_commands"))
             return plan
 
     log.info("heuristic: no confident match, deferring to LLM")
@@ -127,8 +127,9 @@ def _try_node(sb: Sandbox, names: set[str]) -> dict[str, Any] | None:
         "package_manager": pm,
         "install_commands": [install_cmd],
         "build_commands": build_commands,
-        "start_command": start_command,
-        "port_hint": port_hint,
+        "start_commands": [
+            {"label": "app", "command": start_command, "port_hint": port_hint},
+        ],
         "env_required": _scan_env_example(sb, names),
         "notes": (
             f"Heuristic: package.json with scripts.{start_script or 'inferred'}; "
@@ -169,8 +170,9 @@ def _try_python(sb: Sandbox, names: set[str]) -> dict[str, Any] | None:
             "package_manager": pm,
             "install_commands": [install],
             "build_commands": [],
-            "start_command": start,
-            "port_hint": 8000,
+            "start_commands": [
+                {"label": "api", "command": start, "port_hint": 8000},
+            ],
             "env_required": _scan_env_example(sb, names),
             "notes": f"Heuristic: FastAPI app at {entry}, package manager={pm}.",
             "confidence": "high",
@@ -190,8 +192,9 @@ def _try_python(sb: Sandbox, names: set[str]) -> dict[str, Any] | None:
             "package_manager": pm,
             "install_commands": [install],
             "build_commands": [],
-            "start_command": f"{runner}flask --app app run --host 0.0.0.0 --port 5000",
-            "port_hint": 5000,
+            "start_commands": [
+                {"label": "app", "command": f"{runner}flask --app app run --host 0.0.0.0 --port 5000", "port_hint": 5000},
+            ],
             "env_required": _scan_env_example(sb, names),
             "notes": "Heuristic: Flask app at app.py.",
             "confidence": "high",
@@ -211,11 +214,16 @@ def _try_python(sb: Sandbox, names: set[str]) -> dict[str, Any] | None:
             "package_manager": pm,
             "install_commands": [install],
             "build_commands": [],
-            "start_command": (
-                f"{runner}streamlit run {entry} "
-                "--server.address 0.0.0.0 --server.port 8501"
-            ),
-            "port_hint": 8501,
+            "start_commands": [
+                {
+                    "label": "app",
+                    "command": (
+                        f"{runner}streamlit run {entry} "
+                        "--server.address 0.0.0.0 --server.port 8501"
+                    ),
+                    "port_hint": 8501,
+                },
+            ],
             "env_required": _scan_env_example(sb, names),
             "notes": f"Heuristic: Streamlit app at {entry}.",
             "confidence": "high",
@@ -235,8 +243,9 @@ def _try_go(sb: Sandbox, _names: set[str]) -> dict[str, Any] | None:
         "package_manager": "go",
         "install_commands": ["go mod download"],
         "build_commands": [],
-        "start_command": "go run .",
-        "port_hint": port,
+        "start_commands": [
+            {"label": "app", "command": "go run .", "port_hint": port},
+        ],
         "env_required": [],
         "notes": f"Heuristic: Go module, main.go binds to {port}.",
         "confidence": "medium",

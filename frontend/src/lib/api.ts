@@ -34,7 +34,7 @@ export function loginWithGithub(): void {
 }
 
 export function useUser() {
-  return useQuery({
+  return useQuery({ 
     ...meApiV1AuthMeGetOptions(),
     retry: false,
     staleTime: 5 * 60_000,

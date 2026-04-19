@@ -84,6 +84,7 @@ class Deployment(Base):
     install_commands: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
     build_commands: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
     start_command: Mapped[str | None] = mapped_column(Text, nullable=True)
+    start_commands: Mapped[list[dict] | None] = mapped_column(JSON, nullable=True)
     # Legacy column kept for backwards-compat with existing API consumers.
     run_commands: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
     env_required: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
@@ -95,6 +96,8 @@ class Deployment(Base):
     http_status: Mapped[int | None] = mapped_column(Integer, nullable=True)
     exposed_ports: Mapped[list[int] | None] = mapped_column(JSON, nullable=True)
     public_url: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    backend_url: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    tunnel_urls: Mapped[dict | None] = mapped_column(JSON, nullable=True)
 
     logs: Mapped[str | None] = mapped_column(Text, nullable=True)
     error: Mapped[str | None] = mapped_column(Text, nullable=True)

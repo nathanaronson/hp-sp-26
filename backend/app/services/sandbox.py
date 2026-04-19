@@ -594,6 +594,27 @@ class Sandbox:
         log.info("tunnel: port %d -> %s", port, url)
         return url
 
+    def tunnel_all(self, ports: list[int]) -> dict[int, str]:
+        """Get tunnel URLs for multiple ports. Returns {port: url} for each
+        port that has an available tunnel."""
+        try:
+            tunnels = self._sb.tunnels()
+        except Exception:
+            log.exception("tunnel_all: modal tunnels() call failed")
+            return {}
+        result: dict[int, str] = {}
+        for port in ports:
+            if port not in TUNNELABLE_PORTS:
+                log.warning("tunnel_all: port %d not in TUNNELABLE_PORTS, skipping", port)
+                continue
+            t = tunnels.get(port)
+            if t is not None:
+                url = getattr(t, "url", None)
+                if url:
+                    result[port] = url
+                    log.info("tunnel_all: port %d -> %s", port, url)
+        return result
+
 
 def _read_truncated(stream, limit: int) -> str:
     chunks: list[str] = []

@@ -226,21 +226,40 @@ REPORT_INSTALL_PLAN: dict[str, Any] = {
                     "command is run via `bash -c` from the project root."
                 ),
             },
-            "start_command": {
-                "type": "string",
+            "start_commands": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "label": {
+                            "type": "string",
+                            "description": (
+                                "Short name for this service, e.g. 'backend', "
+                                "'frontend', 'db', 'worker'."
+                            ),
+                        },
+                        "command": {
+                            "type": "string",
+                            "description": (
+                                "Shell command that starts this service. "
+                                "MUST bind to 0.0.0.0 (not 127.0.0.1) where "
+                                "the framework supports it."
+                            ),
+                        },
+                        "port_hint": {
+                            "type": ["integer", "null"],
+                            "description": (
+                                "Best guess at the port this service will "
+                                "bind to. null if unknown or not applicable."
+                            ),
+                        },
+                    },
+                    "required": ["label", "command"],
+                },
                 "description": (
-                    "The single command that starts the long-running server. "
-                    "MUST bind to 0.0.0.0 (not 127.0.0.1) where the framework "
-                    "supports it — include the flag if needed (e.g. "
-                    "`--host 0.0.0.0`, `-H 0.0.0.0`, `HOST=0.0.0.0`)."
-                ),
-            },
-            "port_hint": {
-                "type": ["integer", "null"],
-                "description": (
-                    "Best guess at the port the server will bind to, from "
-                    "package.json scripts, framework defaults, or explicit "
-                    "config. null if unknown."
+                    "One entry per long-running service the project needs. "
+                    "Single-service projects have one entry. Monorepos or "
+                    "multi-service projects have multiple."
                 ),
             },
             "env_required": {
@@ -273,7 +292,7 @@ REPORT_INSTALL_PLAN: dict[str, Any] = {
         "required": [
             "runtime",
             "install_commands",
-            "start_command",
+            "start_commands",
             "notes",
             "confidence",
         ],

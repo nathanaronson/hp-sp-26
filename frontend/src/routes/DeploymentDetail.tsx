@@ -49,12 +49,12 @@ export default function DeploymentDetail() {
   const port = deployment.exposed_ports?.[0] ?? null;
   const name = deployment.name ?? "Untitled deployment";
   const liveUrl = deployment.public_url;
+  const backendUrl = deployment.backend_url;
+  const tunnelUrls = deployment.tunnel_urls;
 
-  const copyUrl = () => {
-    if (liveUrl) {
-      navigator.clipboard.writeText(liveUrl);
-      toast.success("URL copied to clipboard");
-    }
+  const copyUrl = (url: string) => {
+    navigator.clipboard.writeText(url);
+    toast.success("URL copied to clipboard");
   };
 
   const shareViaEmail = () => {
@@ -135,7 +135,7 @@ export default function DeploymentDetail() {
                   <ExternalLink className="w-4 h-4" />
                 </a>
                 <button
-                  onClick={copyUrl}
+                  onClick={() => copyUrl(liveUrl)}
                   className="bg-white hover:bg-gray-50 border border-gray-200 px-4 py-3 rounded flex items-center gap-2 transition-colors cursor-pointer"
                 >
                   <Copy className="w-4 h-4" />
@@ -144,7 +144,55 @@ export default function DeploymentDetail() {
               </div>
             </div>
 
-            {port !== null && (
+            {backendUrl && (
+              <div className="mb-4">
+                <div className="text-sm text-gray-700 mb-1">Backend API URL</div>
+                <div className="flex items-center gap-3">
+                  <a
+                    href={backendUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex-1 bg-white px-4 py-3 rounded border border-gray-200 text-indigo-600 hover:text-indigo-700 flex items-center gap-2"
+                  >
+                    {backendUrl}
+                    <ExternalLink className="w-4 h-4" />
+                  </a>
+                  <button
+                    onClick={() => copyUrl(backendUrl)}
+                    className="bg-white hover:bg-gray-50 border border-gray-200 px-4 py-3 rounded flex items-center gap-2 transition-colors cursor-pointer"
+                  >
+                    <Copy className="w-4 h-4" />
+                    Copy URL
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {tunnelUrls && Object.keys(tunnelUrls).length > 1 && (
+              <div className="mb-4">
+                <div className="text-sm text-gray-700 mb-1">All Services</div>
+                <div className="space-y-2">
+                  {Object.entries(tunnelUrls).map(([label, url]) => (
+                    <div key={label} className="flex items-center gap-3">
+                      <span className="bg-gray-100 px-2 py-1 rounded text-xs text-gray-600 min-w-[80px] text-center">
+                        {label}
+                      </span>
+                      <a
+                        href={url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex-1 bg-white px-3 py-2 rounded border border-gray-200 text-indigo-600 hover:text-indigo-700 flex items-center gap-2 text-sm"
+                      >
+                        {url}
+                        <ExternalLink className="w-3 h-3" />
+                      </a>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {port !== null && !tunnelUrls && (
               <div className="mb-4">
                 <div className="text-sm text-gray-700 mb-1">Port</div>
                 <div className="bg-white px-4 py-2 rounded border border-gray-200 inline-block">
