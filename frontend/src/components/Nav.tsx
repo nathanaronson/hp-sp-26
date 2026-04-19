@@ -76,7 +76,9 @@ export function Nav() {
                 <span className="nav-username">{displayName}</span>
               </div>
               <button className="logout-btn" onClick={handleLogout} title="Sign out">
-                <LogOut size={14} style={{ marginRight: 6 }} /> Logout
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                  <LogOut size={14} /> Logout
+                </span>
               </button>
             </>
           )}
