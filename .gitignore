@@ -55,3 +55,5 @@ htmlcov/
 backend/app.db
 backend/app.db-journal
 backend/uploads/
+
+.claude/

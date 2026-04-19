@@ -1,6 +1,7 @@
 .PHONY: help \
         install be-install fe-install \
         dev be-dev fe-dev backend frontend \
+        cli \
         be-run \
         test be-test \
         lint be-lint fe-lint \
@@ -14,8 +15,10 @@ UV       ?= uv
 PNPM     ?= pnpm
 BE       := backend
 FE       := frontend
+CLI_DIR  := cli
 BE_HOST  ?= 0.0.0.0
 BE_PORT  ?= 8000
+ARGS     ?=
 
 help:
 	@echo "Common:"
@@ -23,6 +26,7 @@ help:
 	@echo "  dev            Run backend and frontend together (Ctrl-C stops both)"
 	@echo "  backend        Run only the backend dev server (alias for be-dev)"
 	@echo "  frontend       Run only the frontend dev server (alias for fe-dev)"
+	@echo "  cli            Run the CLI locally (pass ARGS=\"...\" to forward args)"
 	@echo "  api            Regenerate the typed API client (be-openapi -> fe-gen-api)"
 	@echo "  test           Run all tests (currently backend)"
 	@echo "  lint           Lint backend + frontend"
@@ -64,6 +68,9 @@ dev:
 backend: be-dev
 
 frontend: fe-dev
+
+cli:
+	cd $(CLI_DIR) && $(PNPM) build && $(PNPM) start -- $(ARGS)
 
 api: be-openapi fe-gen-api
 

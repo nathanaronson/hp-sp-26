@@ -196,6 +196,21 @@ function matchRoute(path: string, method: string): Route | undefined {
     }
   }
 
+  const startMatch = path.match(/^\/api\/deployments\/([^/]+)\/start$/);
+  if (startMatch && method === "POST") {
+    const id = startMatch[1]!;
+    return {
+      target: `/api/v1/deployments/${id}/start`,
+      adapt: (raw): Deployment => adaptDeployment(raw as BackendDeployment),
+    };
+  }
+
+  const deleteMatch = path.match(/^\/api\/deployments\/([^/]+)\/record$/);
+  if (deleteMatch && method === "DELETE") {
+    const id = deleteMatch[1]!;
+    return { target: `/api/v1/deployments/${id}/record` };
+  }
+
   return undefined;
 }
 
