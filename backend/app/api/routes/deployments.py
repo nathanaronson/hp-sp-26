@@ -21,6 +21,7 @@ from app.schemas.deployment import (
     DeploymentUpdate,
 )
 from app.services.deploy import run_deployment, teardown_sandbox
+from app.services.uploads import get_upload_record
 
 log = logging.getLogger(__name__)
 
@@ -38,6 +39,13 @@ async def create_deployment(
     current_user: CurrentUser,
     background_tasks: BackgroundTasks,
 ) -> Deployment:
+    if payload.upload_id:
+        record = get_upload_record(payload.upload_id)
+        if record is None:
+            raise HTTPException(status_code=422, detail="Upload not found")
+        if record.owner_user_id != current_user.id:
+            raise HTTPException(status_code=403, detail="Upload does not belong to this user")
+
     deployment = Deployment(
         user_id=current_user.id,
         name=payload.name,

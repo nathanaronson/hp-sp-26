@@ -42,6 +42,7 @@ const HELP_TEXT = `
     --env KEY=val              Inline env var, repeatable
     --env-file <path>          Load env vars from a file
     --name <name>              Override the deployment name
+    --upload                   Force local bundle upload (include uncommitted changes)
     --follow                   Auto-open the live URL when the deploy is ready
     --yes                      Skip confirmation for destructive commands
     --json                     Print JSON for script-friendly commands
@@ -59,7 +60,8 @@ const HELP_TEXT = `
 
   Tips
     - Press q to quit long-running Ink views.
-    - Local paths deploy via their GitHub remote; uncommitted local changes are not included.
+    - Local paths deploy via their GitHub remote by default.
+    - Use --upload to deploy the local working tree (including uncommitted changes).
     - Use --follow when you want the CLI to open the live app as soon as it is ready.
     - Mock mode is the fastest way to demo the CLI without a backend.
 `;
@@ -74,6 +76,7 @@ const cli = meow(
       env: { type: "string", isMultiple: true, default: [] },
       envFile: { type: "string" },
       name: { type: "string" },
+      upload: { type: "boolean", default: false },
       follow: { type: "boolean", default: false },
       yes: { type: "boolean", default: false },
       json: { type: "boolean", default: false },
@@ -95,6 +98,7 @@ switch (cmd) {
         envInline={cli.flags.env ?? []}
         envFile={cli.flags.envFile}
         name={cli.flags.name}
+        forceUpload={cli.flags.upload ?? false}
         follow={cli.flags.follow ?? false}
       />,
     );
@@ -143,6 +147,7 @@ switch (cmd) {
         envInline={cli.flags.env ?? []}
         envFile={cli.flags.envFile}
         name={cli.flags.name}
+        forceUpload={cli.flags.upload ?? false}
         follow={cli.flags.follow ?? false}
       />,
     );

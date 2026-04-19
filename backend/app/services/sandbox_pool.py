@@ -136,7 +136,7 @@ def _provision_warm_sb(model: str) -> Sandbox:
     If the warmup chat fails we still return the sandbox — it's usable,
     just slower on first real use. We log a warning so it shows up.
     """
-    sb = Sandbox.create(timeout_s=30 * 60)
+    sb = Sandbox.create()
     try:
         sb.set_model(model)
         sb.start_gateway()

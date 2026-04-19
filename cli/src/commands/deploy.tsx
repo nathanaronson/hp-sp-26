@@ -20,7 +20,6 @@ import {
   isGithubUrl,
   normalizeGithubUrl,
 } from "../lib/github.js";
-import { isMockMode } from "../lib/mock.js";
 import type {
   CreateDeploymentBody,
   CreateDeploymentResponse,
@@ -35,6 +34,7 @@ type Props = {
   envFile?: string;
   name?: string;
   follow: boolean;
+  forceUpload: boolean;
 };
 
 type DeployPhase =
@@ -49,7 +49,7 @@ type DeployPhase =
 
 const TERMINAL = new Set<DeploymentStatus>(["running", "failed", "stopped"]);
 
-export function Deploy({ target, envInline, envFile, name, follow }: Props) {
+export function Deploy({ target, envInline, envFile, name, follow, forceUpload }: Props) {
   const { exit } = useApp();
   const { isRawModeSupported } = useStdin();
   const { isAuthed } = useAuth();
@@ -97,12 +97,12 @@ export function Deploy({ target, envInline, envFile, name, follow }: Props) {
           source = { type: "github", url: githubUrl };
         } else {
           setPhase("resolving_source");
-          const githubUrl = await detectGithubUrlFromGit(cwd);
-          if (githubUrl) {
+          const githubUrl = forceUpload ? undefined : await detectGithubUrlFromGit(cwd);
+          if (githubUrl && !forceUpload) {
             if (cancelled) return;
             setResolvedGithubUrl(githubUrl);
             source = { type: "github", url: githubUrl };
-          } else if (isMockMode()) {
+          } else {
             setPhase("bundling");
             const bundled = await bundleDir(cwd);
             bundlePath = bundled.path;
@@ -114,10 +114,6 @@ export function Deploy({ target, envInline, envFile, name, follow }: Props) {
             if (cancelled) return;
             setUpload(uploaded);
             source = { type: "upload", id: uploaded.uploadId };
-          } else {
-            throw new Error(
-              "Local deploys now follow the GitHub path. No GitHub remote was found for this directory, so use `dploy deploy <github-url>` or add a GitHub remote first.",
-            );
           }
         }
 
@@ -144,7 +140,7 @@ export function Deploy({ target, envInline, envFile, name, follow }: Props) {
     return () => {
       cancelled = true;
     };
-  }, [envFile, envInline, exit, isAuthed, isGithub, name, resolvedPath, sourceTarget]);
+  }, [envFile, envInline, exit, forceUpload, isAuthed, isGithub, name, resolvedPath, sourceTarget]);
 
   useEffect(() => {
     if (!deployment) return;
@@ -261,6 +257,12 @@ export function Deploy({ target, envInline, envFile, name, follow }: Props) {
           <Box>
             <Text dimColor>
               Resolved from local checkout {resolvedPath}. Uncommitted local changes are not included.
+            </Text>
+          </Box>
+        ) : !isGithub && !resolvedGithubUrl && forceUpload ? (
+          <Box>
+            <Text dimColor>
+              Force-upload enabled. Deploying the local working tree (including uncommitted changes).
             </Text>
           </Box>
         ) : null}

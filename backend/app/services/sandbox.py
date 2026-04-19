@@ -213,12 +213,14 @@ class Sandbox:
     # ------------------------------------------------------------------
 
     @classmethod
-    def create(cls, *, timeout_s: int = 30 * 60) -> "Sandbox":
+    def create(cls, *, timeout_s: int | None = None) -> "Sandbox":
         # LLM keys are injected at runtime as env vars via a Modal Secret so
         # OpenClaw's `${ANTHROPIC_API_KEY}` substitution in the mounted
         # config.json resolves correctly. Keeping the keys out of the image
         # means key rotation doesn't trigger an image rebuild.
         settings = get_settings()
+        if timeout_s is None:
+            timeout_s = max(1, settings.deployment_sandbox_ttl_hours) * 60 * 60
         secret_vars: dict[str, str] = {}
         if settings.anthropic_api_key:
             secret_vars["ANTHROPIC_API_KEY"] = settings.anthropic_api_key
@@ -407,6 +409,30 @@ class Sandbox:
         log.info("repo cloned in %dms (size=%s)",
                  int((time.perf_counter() - t0) * 1000),
                  size.stdout.strip() or "?")
+
+    def extract_upload_archive(self, local_archive_path: str | Path) -> None:
+        """Copy a local tarball into the sandbox and extract it to REPO_DIR."""
+        local_path = Path(local_archive_path)
+        if not local_path.exists():
+            raise SandboxError(f"upload archive does not exist: {local_path}")
+
+        remote_path = "/tmp/dploy-upload.tar.gz"
+        log.info("copying upload archive into sandbox: %s -> %s", local_path, remote_path)
+        try:
+            self._sb.filesystem.copy_from_local(str(local_path), remote_path)
+        except Exception as e:
+            raise SandboxError(f"failed copying upload archive to sandbox: {e}") from e
+
+        self.check_exec(
+            f"rm -rf {shlex.quote(REPO_DIR)} && "
+            f"mkdir -p {shlex.quote(REPO_DIR)} && "
+            f"tar -xzf {shlex.quote(remote_path)} -C {shlex.quote(REPO_DIR)} "
+            "--no-same-owner --no-same-permissions && "
+            f"rm -f {shlex.quote(remote_path)}",
+            timeout_s=120,
+            stdout_limit=200_000,
+            stderr_limit=200_000,
+        )
 
     # ------------------------------------------------------------------
     # OpenClaw chat

@@ -32,8 +32,8 @@ import logging
 import re
 import shlex
 import time
-import re
 from contextlib import contextmanager
+from pathlib import Path
 from typing import Any
 
 from app.core.config import get_settings
@@ -69,6 +69,7 @@ from app.services.sandbox import (
     Sandbox,
     SandboxError,
 )
+from app.services.uploads import get_upload_record
 
 log = logging.getLogger(__name__)
 
@@ -308,6 +309,11 @@ def _clone_into_sync(sb: Sandbox, github_url: str) -> None:
         raise
 
 
+def _extract_upload_into_repo_sync(sb: Sandbox, archive_path: Path) -> None:
+    """Seed REPO_DIR from an uploaded tarball."""
+    sb.extract_upload_archive(archive_path)
+
+
 def _repo_has(sb: Sandbox, relative_path: str) -> bool:
     res = sb.exec(
         f"test -f {shlex.quote(relative_path)}",
@@ -444,21 +450,21 @@ async def run_deployment(deployment_id: str) -> None:
         f"Starting deployment: source={github_url or upload_id} model={model}",
     )
 
-    if not github_url:
+    if not github_url and not upload_id:
         await _update_deployment(
             deployment_id,
             status=DEPLOYMENT_STATUS_FAILED,
-            error=(
-                "Upload-based deployments not yet supported. "
-                "Provide `github_url` instead."
-            ),
+            error="Deployment source missing (expected github_url or upload_id).",
         )
         await _append_log(
             deployment_id,
-            "ERROR: upload-based deployments not yet supported. Use github_url.",
+            "ERROR: deployment source missing.",
         )
-        dlog.warning("upload-based deployments not supported (upload_id=%s); failing fast",
-                     upload_id)
+        dlog.warning(
+            "deployment source missing (github_url=%s upload_id=%s)",
+            github_url,
+            upload_id,
+        )
         return
 
     sb: Sandbox | None = None
@@ -479,10 +485,25 @@ async def run_deployment(deployment_id: str) -> None:
         dlog.info("sandbox acquired: id=%s", sb.object_id)
         await _append_log(deployment_id, f"Sandbox ready: {sb.object_id}")
 
-        await _append_log(deployment_id, f"Cloning {github_url}...")
-        with _step(dlog, "clone repo"):
-            await asyncio.to_thread(_clone_into_sync, sb, github_url)
-        await _append_log(deployment_id, "Repo cloned.")
+        source_description = ""
+        if github_url:
+            await _append_log(deployment_id, f"Cloning {github_url}...")
+            with _step(dlog, "clone repo"):
+                await asyncio.to_thread(_clone_into_sync, sb, github_url)
+            await _append_log(deployment_id, "Repo cloned.")
+            source_description = f"GitHub repo: {github_url}"
+        else:
+            record = get_upload_record(upload_id or "")
+            if record is None:
+                raise RuntimeError(f"Upload {upload_id} is missing from upload storage")
+            await _append_log(
+                deployment_id,
+                f"Preparing uploaded source {record.upload_id} ({record.original_filename})...",
+            )
+            with _step(dlog, "extract uploaded archive", upload_id=record.upload_id):
+                await asyncio.to_thread(_extract_upload_into_repo_sync, sb, record.archive_path)
+            await _append_log(deployment_id, "Uploaded project extracted.")
+            source_description = f"Uploaded archive: {record.upload_id}"
 
         # ------------------------------------------------------------------
         # 2. Agent #1 — analyze (with heuristic fast-path)
@@ -528,7 +549,7 @@ async def run_deployment(deployment_id: str) -> None:
                 f"Heuristic uncertain; running Agent #1 (analyze) with {model}...",
             )
             analyze_user = render_analyze_user(
-                source_description=f"GitHub repo: {github_url}",
+                source_description=source_description,
                 name=name,
                 user_env_keys=env_keys,
             )

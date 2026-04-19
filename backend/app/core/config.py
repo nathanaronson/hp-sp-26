@@ -49,6 +49,10 @@ class Settings(BaseSettings):
     dedalus_api_key: str = ""
     anthropic_api_key: str = ""
 
+    # How long deployment sandboxes should live before Modal auto-terminates
+    # them, unless explicitly torn down earlier.
+    deployment_sandbox_ttl_hours: int = 6
+
 
 @lru_cache
 def get_settings() -> Settings:

@@ -1,4 +1,11 @@
+import asyncio
+from datetime import UTC, datetime, timedelta
+
 from fastapi.testclient import TestClient
+
+from app.db.session import SessionLocal
+from app.models.session import Session
+from app.models.user import User
 
 
 def test_create_requires_auth(client: TestClient) -> None:
@@ -53,13 +60,80 @@ def test_get_unknown_deployment(authed_client: TestClient) -> None:
     assert response.status_code == 404
 
 
-def test_upload_endpoint(client: TestClient) -> None:
+def test_upload_requires_auth(client: TestClient) -> None:
     files = {"file": ("hello.txt", b"hello world", "text/plain")}
     response = client.post("/api/v1/uploads", files=files)
+    assert response.status_code == 401
+
+
+def test_upload_endpoint(authed_client: TestClient) -> None:
+    files = {"file": ("hello.txt", b"hello world", "text/plain")}
+    response = authed_client.post("/api/v1/uploads", files=files)
     assert response.status_code == 200
     body = response.json()
     assert body["upload_id"]
     assert body["size"] == len(b"hello world")
+
+
+def test_create_with_upload_source(authed_client: TestClient, monkeypatch) -> None:
+    async def _noop_run_deployment(_: str) -> None:
+        return None
+
+    monkeypatch.setattr("app.api.routes.deployments.run_deployment", _noop_run_deployment)
+    upload = authed_client.post(
+        "/api/v1/uploads",
+        files={"file": ("repo.tar.gz", b"hello world", "application/gzip")},
+    )
+    assert upload.status_code == 200, upload.text
+    upload_id = upload.json()["upload_id"]
+
+    create = authed_client.post(
+        "/api/v1/deployments",
+        json={"name": "local-upload", "upload_id": upload_id},
+    )
+    assert create.status_code == 201, create.text
+    body = create.json()
+    assert body["upload_id"] == upload_id
+    assert body["github_url"] is None
+
+
+def test_create_rejects_upload_owned_by_other_user(client: TestClient, monkeypatch) -> None:
+    async def _noop_run_deployment(_: str) -> None:
+        return None
+
+    monkeypatch.setattr("app.api.routes.deployments.run_deployment", _noop_run_deployment)
+
+    async def _mint_token(github_id: int, login: str, token: str) -> str:
+        async with SessionLocal() as db:
+            user = User(github_id=github_id, login=login)
+            db.add(user)
+            await db.flush()
+            session = Session(
+                token=token,
+                user_id=user.id,
+                expires_at=datetime.now(UTC) + timedelta(hours=1),
+            )
+            db.add(session)
+            await db.commit()
+            return session.token
+
+    owner_token = asyncio.run(_mint_token(777, "upload-owner", "owner-token"))
+    other_token = asyncio.run(_mint_token(778, "other-user", "other-token"))
+
+    upload = client.post(
+        "/api/v1/uploads",
+        headers={"Authorization": f"Bearer {owner_token}"},
+        files={"file": ("repo.tar.gz", b"hello world", "application/gzip")},
+    )
+    assert upload.status_code == 200, upload.text
+    upload_id = upload.json()["upload_id"]
+
+    create = client.post(
+        "/api/v1/deployments",
+        headers={"Authorization": f"Bearer {other_token}"},
+        json={"name": "forbidden", "upload_id": upload_id},
+    )
+    assert create.status_code == 403, create.text
 
 
 def test_bearer_token_auth(client: TestClient) -> None:
