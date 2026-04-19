@@ -10,10 +10,10 @@ name: CLI Release
 # To enable npm publishing you need ONE of:
 #   a) An automation token from npmjs.com saved as repo secret `NPM_TOKEN`.
 #   b) A trusted publisher configured on npmjs.com that allows this repo +
-#      workflow (no token needed; provenance still works).
+#      workflow (no token needed; OIDC).
 #
-# Provenance ("built from this commit, by this workflow") requires the
-# `id-token: write` permission below and a public repo. It's wired up.
+# npm Sigstore provenance requires a *public* GitHub source repo. Keep the
+# repo public or `npm publish --provenance` will fail with E422.
 "on":
   push:
     branches: [main]
