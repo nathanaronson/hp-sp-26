@@ -115,27 +115,17 @@ async def delete_deployment(
     deployment_id: str,
     session: SessionDep,
     current_user: CurrentUser,
-<<<<<<< HEAD
+    background_tasks: BackgroundTasks,
 ) -> None:
     deployment = await session.get(Deployment, deployment_id)
     if deployment is None or deployment.user_id != current_user.id:
         raise HTTPException(status_code=404, detail="Deployment not found")
+    sandbox_id = deployment.sandbox_id
+    log.info(
+        "DELETE /deployments/%s: hard-deleting (user=%s, sandbox=%s)",
+        deployment_id, current_user.id, sandbox_id,
+    )
+    if sandbox_id:
+        background_tasks.add_task(teardown_deployment, deployment.id)
     await session.delete(deployment)
     await session.commit()
-=======
-    background_tasks: BackgroundTasks,
-) -> Deployment:
-    deployment = await session.get(Deployment, deployment_id)
-    if deployment is None or deployment.user_id != current_user.id:
-        raise HTTPException(status_code=404, detail="Deployment not found")
-    deployment.status = DEPLOYMENT_STATUS_STOPPED
-    await session.commit()
-    await session.refresh(deployment)
-    log.info(
-        "DELETE /deployments/%s: marked stopped (user=%s, sandbox=%s)",
-        deployment_id, current_user.id, deployment.sandbox_id,
-    )
-    if deployment.sandbox_id:
-        background_tasks.add_task(teardown_deployment, deployment.id)
-    return deployment
->>>>>>> main
