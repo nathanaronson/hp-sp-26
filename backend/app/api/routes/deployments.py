@@ -62,17 +62,14 @@ async def get_deployment(
     return deployment
 
 
-@router.delete("/{deployment_id}", response_model=DeploymentRead)
-async def stop_deployment(
+@router.delete("/{deployment_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_deployment(
     deployment_id: str,
     session: SessionDep,
     current_user: CurrentUser,
-) -> Deployment:
+) -> None:
     deployment = await session.get(Deployment, deployment_id)
     if deployment is None or deployment.user_id != current_user.id:
         raise HTTPException(status_code=404, detail="Deployment not found")
-    deployment.status = "stopped"
+    await session.delete(deployment)
     await session.commit()
-    await session.refresh(deployment)
-    # TODO: signal the running sandbox/agent to actually tear down.
-    return deployment

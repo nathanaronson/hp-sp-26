@@ -1,14 +1,37 @@
-import { useState } from "react";
-import { Navigate } from "react-router";
+import { useState, useEffect } from "react";
+import { Navigate, useNavigate } from "react-router";
+
 import dployIcon from "../dployIcon.png";
 import { loginWithGithub } from "../lib/api";
+import { GithubIcon } from "../components/GithubIcon";
 import { useAuth } from "../lib/AuthContext";
+
+const FLOATING_TOKENS = [
+  { txt: "→ git push", top: "12%", left: "8%", delay: 0 },
+  { txt: "$ dploy deploy", top: "24%", left: "82%", delay: 2 },
+  { txt: "✓ LIVE", top: "68%", left: "6%", delay: 4, kind: "ok" },
+  { txt: "port 3000", top: "78%", left: "86%", delay: 1 },
+  { txt: "building…", top: "42%", left: "92%", delay: 3, kind: "warn" },
+  { txt: "npm install", top: "58%", left: "3%", delay: 2.5 },
+];
 
 export default function SignIn() {
   const { user, loading } = useAuth();
   const [redirecting, setRedirecting] = useState(false);
 
-  if (loading) return null;
+  // Sync dark mode from localStorage on load
+  useEffect(() => {
+    try {
+      const t = JSON.parse(localStorage.getItem("dployTweaks") || "{}");
+      document.documentElement.classList.toggle("dark", t.theme === "dark");
+    } catch {}
+  }, []);
+
+  if (loading) return (
+    <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "var(--bg)" }}>
+      <span className="big-spinner" />
+    </div>
+  );
   if (user) return <Navigate to="/dashboard" replace />;
 
   const handleSignIn = () => {
@@ -17,25 +40,87 @@ export default function SignIn() {
   };
 
   return (
-    <div className="size-full min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center">
-      <div className="bg-white rounded-lg shadow-xl p-12 max-w-md w-full">
-        <div className="flex items-center justify-center mb-8">
-          <img src={dployIcon} alt="DPloy" className="w-16 h-16 rounded-xl shadow-md" />
+    <div className="signin-root">
+      {/* Ambient background */}
+      <div className="dots-bg" aria-hidden>
+        <div className="dots-layer" />
+        <div className="dots-layer dots-layer-2" />
+      </div>
+      <div className="orb orb-1" aria-hidden />
+      <div className="orb orb-2" aria-hidden />
+      <div className="orb orb-3" aria-hidden />
+
+      {/* Floating CLI tokens */}
+      <div className="floating-tokens" aria-hidden>
+        {FLOATING_TOKENS.map((t, i) => (
+          <div
+            key={i}
+            className={`ft${t.kind ? ` ft-${t.kind}` : ""}`}
+            style={{ top: t.top, left: t.left, animationDelay: `${t.delay}s` }}
+          >
+            {t.txt}
+          </div>
+        ))}
+      </div>
+
+      {/* Hero card */}
+      <div className="signin-card">
+        <div className="signin-logo-center">
+          <div className="signin-logo-wrap">
+            <img src={dployIcon} alt="dploy" className="signin-logo" />
+            <div className="signin-logo-trail" aria-hidden>
+              <span /><span /><span />
+            </div>
+          </div>
         </div>
-        <h1 className="text-3xl text-center mb-2">DPloy</h1>
-        <p className="text-center text-gray-600 mb-8">
-          Deploy your apps in under 1 minute
-        </p>
+
+        <h1 className="signin-title">
+          <span className="word">dploy</span>
+        </h1>
+        <p className="signin-sub">One command. One minute. One live URL.</p>
+
+        {/* Stats strip */}
+        <div className="signin-stats">
+          <div className="stat-block">
+            <div className="stat-num">&lt;60<span className="unit">s</span></div>
+            <div className="stat-lbl">avg deploy</div>
+          </div>
+          <div className="stat-divider" />
+          <div className="stat-block">
+            <div className="stat-num">99.9<span className="unit">%</span></div>
+            <div className="stat-lbl">uptime</div>
+          </div>
+          <div className="stat-divider" />
+          <div className="stat-block">
+            <div className="stat-num">3<span className="unit">x</span></div>
+            <div className="stat-lbl">regions</div>
+          </div>
+        </div>
+
         <button
           onClick={handleSignIn}
           disabled={redirecting}
-          className="w-full bg-gray-900 hover:bg-gray-800 disabled:opacity-50 text-white py-3 px-4 rounded-lg flex items-center justify-center gap-3 transition-colors cursor-pointer disabled:cursor-not-allowed"
+          className="btn-primary-xl"
         >
-          <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-            <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z" />
-          </svg>
-          {redirecting ? "Redirecting to GitHub..." : "Sign in with GitHub"}
+          {redirecting ? (
+            <>
+              <span className="spinner-white" aria-hidden />
+              Redirecting to GitHub…
+            </>
+          ) : (
+            <>
+              <GithubIcon size={18} />
+              Continue with GitHub
+            </>
+          )}
+          <span className="btn-shine" aria-hidden />
         </button>
+
+        <div className="signin-foot">
+          <span className="kbd">⌘ K</span>
+          <span>or</span>
+          <code className="inline-code">dploy login</code>
+        </div>
       </div>
     </div>
   );

@@ -83,6 +83,23 @@ export function useDeploy() {
   });
 }
 
+export function useDeleteDeployment() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (deploymentId: string) => {
+      const res = await fetch(`${API_BASE_URL}/api/v1/deployments/${deploymentId}`, {
+        method: "DELETE",
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Failed to delete deployment");
+      return res;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: listDeploymentsApiV1DeploymentsGetOptions().queryKey });
+    },
+  });
+}
+
 // ---------- UI display helpers ----------
 
 export type DisplayStatus = "Running" | "Building" | "Failed";

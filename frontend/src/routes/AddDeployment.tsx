@@ -1,135 +1,450 @@
-import { useState, type FormEvent } from "react";
+import { useState, useEffect, type FormEvent } from "react";
 import { useNavigate, Navigate } from "react-router";
-import { ArrowLeft, Folder } from "lucide-react";
-
-function GithubIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-      <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z" />
-    </svg>
-  );
-}
+import { ArrowLeft, Terminal, Check, Key, Rocket, Link, X, Plus, Upload, Eye, EyeOff } from "lucide-react";
+import { GithubIcon } from "../components/GithubIcon";
 import { toast } from "sonner";
-import dployIcon from "../dployIcon.png";
 import { useAuth } from "../lib/AuthContext";
 import { useDeploy } from "../lib/api";
+import { Reveal } from "../components/Reveal";
+import { Nav } from "../components/Nav";
+
+const MOCK_RECENT_REPOS = [
+  { full: "vercel/next.js", desc: "The React Framework", stars: 122000, lang: "TypeScript", updated: "1h ago" },
+  { full: "honojs/hono", desc: "Web framework for edge runtimes", stars: 20400, lang: "TypeScript", updated: "3h ago" },
+  { full: "pocketbase/pocketbase", desc: "Open Source backend in 1 file", stars: 39800, lang: "Go", updated: "1d ago" },
+  { full: "withastro/astro", desc: "The web framework for content-driven websites", stars: 46200, lang: "Astro", updated: "2d ago" },
+  { full: "pallets/flask", desc: "The Python micro framework", stars: 68000, lang: "Python", updated: "4d ago" },
+];
+
+const LANG_CLS: Record<string, string> = {
+  TypeScript: "lang-typescript",
+  Go: "lang-go",
+  Astro: "lang-astro",
+  Python: "lang-python",
+};
+
+type Permission = "ask" | "denied" | "loading" | "granted";
+
+interface EnvVar {
+  id: number;
+  key: string;
+  value: string;
+  secret: boolean;
+}
+
+let envIdCounter = 1;
+const emptyEnvVar = (): EnvVar => ({ id: envIdCounter++, key: "", value: "", secret: false });
 
 export default function AddDeployment() {
   const navigate = useNavigate();
   const { user, loading: authLoading } = useAuth();
   const deploy = useDeploy();
-  const [deploymentType, setDeploymentType] = useState<"github" | "local">("github");
-  const [githubUrl, setGithubUrl] = useState("");
+  const [mode, setMode] = useState<"github" | "local">("github");
+  const [url, setUrl] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [envVars, setEnvVars] = useState<EnvVar[]>([emptyEnvVar()]);
+  const [envExpanded, setEnvExpanded] = useState(false);
 
-  if (authLoading) return null;
-  if (!user) return <Navigate to="/" replace />;
+  const [permission, setPermission] = useState<Permission>(() => {
+    try { return (localStorage.getItem("dployRepoPerm") as Permission) || "ask"; } catch { return "ask"; }
+  });
+  const [recent, setRecent] = useState(permission === "granted" ? MOCK_RECENT_REPOS : []);
 
-  const handleDeploy = (e: FormEvent) => {
-    e.preventDefault();
-    const url = githubUrl.trim();
-    if (!url) return;
+  useEffect(() => {
+    try { localStorage.setItem("dployRepoPerm", permission); } catch {}
+  }, [permission]);
+
+  // ⌘+Enter shortcut
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === "Enter" && mode === "github" && url && !submitting) {
+        e.preventDefault();
+        handleDeploy();
+      }
+      if (e.key === "Escape") navigate("/dashboard");
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [url, submitting, mode]);
+
+  if (authLoading) return (
+    <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "var(--bg)" }}>
+      <span className="big-spinner" />
+    </div>
+  );
+  if (!user) return <Navigate to="/signin" replace />;
+
+  const grantPermission = () => {
+    setPermission("loading");
+    setTimeout(() => {
+      setPermission("granted");
+      setRecent(MOCK_RECENT_REPOS);
+      toast.success("Connected to GitHub");
+    }, 650);
+  };
+
+  const addEnvVar = () => setEnvVars((prev) => [...prev, emptyEnvVar()]);
+
+  const updateEnvVar = (id: number, field: "key" | "value", val: string) => {
+    setEnvVars((prev) => prev.map((v) => (v.id === id ? { ...v, [field]: val } : v)));
+  };
+
+  const toggleSecret = (id: number) => {
+    setEnvVars((prev) => prev.map((v) => (v.id === id ? { ...v, secret: !v.secret } : v)));
+  };
+
+  const removeEnvVar = (id: number) => {
+    setEnvVars((prev) => {
+      const next = prev.filter((v) => v.id !== id);
+      return next.length === 0 ? [emptyEnvVar()] : next;
+    });
+  };
+
+  const pasteEnvFile = () => {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = ".env,.env.*,text/plain";
+    input.onchange = async () => {
+      const file = input.files?.[0];
+      if (!file) return;
+      const text = await file.text();
+      const parsed: EnvVar[] = [];
+      for (const line of text.split("\n")) {
+        const trimmed = line.trim();
+        if (!trimmed || trimmed.startsWith("#")) continue;
+        const eqIdx = trimmed.indexOf("=");
+        if (eqIdx < 1) continue;
+        const k = trimmed.slice(0, eqIdx).trim();
+        let v = trimmed.slice(eqIdx + 1).trim();
+        // Strip surrounding quotes
+        if ((v.startsWith('"') && v.endsWith('"')) || (v.startsWith("'") && v.endsWith("'"))) {
+          v = v.slice(1, -1);
+        }
+        parsed.push({ id: envIdCounter++, key: k, value: v, secret: false });
+      }
+      if (parsed.length === 0) {
+        toast.error("No valid KEY=value lines found");
+        return;
+      }
+      setEnvVars(parsed);
+      setEnvExpanded(true);
+      toast.success(`Imported ${parsed.length} variable${parsed.length > 1 ? "s" : ""}`);
+    };
+    input.click();
+  };
+
+  const handleDeploy = (e?: FormEvent) => {
+    e?.preventDefault();
+    const trimmed = url.trim();
+    if (!trimmed) { toast.error("Paste a GitHub URL first"); return; }
+    // Collect non-empty env vars
+    const envObj: Record<string, string> = {};
+    for (const v of envVars) {
+      const k = v.key.trim();
+      if (k && v.value) envObj[k] = v.value;
+    }
+
+    setSubmitting(true);
     deploy.mutate(
-      { body: { github_url: url } },
+      { body: { github_url: trimmed, ...(Object.keys(envObj).length > 0 ? { env_vars: envObj } : {}) } as never },
       {
-        onSuccess: (created) => navigate(`/deployment/${created.id}`),
-        onError: () => toast.error("Failed to start deployment"),
+        onSuccess: (created) => {
+          setSubmitting(false);
+          navigate(`/deployment/${created.id}`);
+        },
+        onError: () => {
+          setSubmitting(false);
+          toast.error("Failed to start deployment");
+        },
       },
     );
   };
 
+  const displayUrl = url.replace(/^https?:\/\/github\.com\//, "");
+
   return (
-    <div className="size-full min-h-screen bg-gray-50">
-      {/* Nav */}
-      <div className="border-b bg-white">
-        <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <img src={dployIcon} alt="DPloy" className="w-8 h-8 rounded-lg" />
-            <span className="text-xl">DPloy</span>
+    <div style={{ background: "var(--bg)", minHeight: "100vh" }}>
+      <Nav />
+      <div className="add-wrap">
+        <Reveal>
+          <button className="back-btn" onClick={() => navigate("/dashboard")}>
+            <ArrowLeft size={14} /> Back to Dashboard
+          </button>
+        </Reveal>
+
+        <Reveal delay={60}>
+          <div className="add-header">
+            <div className="add-header-badge">
+              <Rocket size={14} /> New deployment
+            </div>
+            <h1 className="add-title">Let's ship something.</h1>
+            <p className="add-sub">
+              From repo to live URL — typically in <strong>38 seconds.</strong>
+            </p>
           </div>
+        </Reveal>
+
+        {/* Mode switcher */}
+        <Reveal delay={120} className="mode-switch">
           <button
-            onClick={() => navigate("/dashboard")}
-            className="flex items-center gap-2 text-sm text-gray-600 hover:text-gray-900 cursor-pointer"
+            className={`mode-card ${mode === "github" ? "sel" : ""}`}
+            onClick={() => setMode("github")}
           >
-            <ArrowLeft className="w-4 h-4" />
-            Back to Dashboard
-          </button>
-        </div>
-      </div>
-
-      <div className="max-w-2xl mx-auto px-6 py-12">
-        <h1 className="text-3xl mb-2">Add New Deployment</h1>
-        <p className="text-gray-600 mb-8">
-          Deploy from GitHub or a local project on your computer
-        </p>
-
-        <div className="bg-white rounded-lg border p-6 mb-6">
-          {/* Type Picker */}
-          <label className="block mb-4">
-            <span className="text-sm text-gray-700 mb-2 block">Deployment Type</span>
-            <div className="grid grid-cols-2 gap-4">
-              <button
-                onClick={() => setDeploymentType("github")}
-                className={`p-4 border-2 rounded-lg flex flex-col items-center gap-2 transition-all cursor-pointer ${
-                  deploymentType === "github"
-                    ? "border-indigo-600 bg-indigo-50"
-                    : "border-gray-200 hover:border-gray-300"
-                }`}
-              >
-                <GithubIcon className="w-8 h-8 stroke-[1.5]" />
-                <span>GitHub Repository</span>
-              </button>
-              <button
-                onClick={() => setDeploymentType("local")}
-                className={`p-4 border-2 rounded-lg flex flex-col items-center gap-2 transition-all cursor-pointer ${
-                  deploymentType === "local"
-                    ? "border-indigo-600 bg-indigo-50"
-                    : "border-gray-200 hover:border-gray-300"
-                }`}
-              >
-                <Folder className="w-8 h-8 stroke-[1.5]" />
-                <span>Local Project</span>
-              </button>
+            <div className="mode-icon"><GithubIcon size={28} /></div>
+            <div>
+              <div className="mode-title">GitHub Repository</div>
+              <div className="mode-sub">Any public or connected repo</div>
             </div>
-          </label>
+            <div className="mode-check">{mode === "github" && <Check size={14} />}</div>
+          </button>
+          <button
+            className={`mode-card ${mode === "local" ? "sel" : ""}`}
+            onClick={() => setMode("local")}
+          >
+            <div className="mode-icon"><Terminal size={28} /></div>
+            <div>
+              <div className="mode-title">Local Project</div>
+              <div className="mode-sub">Via the dploy CLI</div>
+            </div>
+            <div className="mode-check">{mode === "local" && <Check size={14} />}</div>
+          </button>
+        </Reveal>
 
-          {/* GitHub form */}
-          {deploymentType === "github" ? (
-            <form onSubmit={handleDeploy}>
-              <label className="block">
-                <span className="text-sm text-gray-700 mb-2 block">GitHub Repository URL</span>
+        {mode === "github" ? (
+          <Reveal delay={180} className="add-panel">
+            {/* URL input */}
+            <label className="field">
+              <span className="field-label">
+                <Link size={13} /> Repository URL
+              </span>
+              <div className="url-input-wrap">
+                <span className="url-prefix">github.com/</span>
                 <input
-                  type="text"
-                  value={githubUrl}
-                  onChange={(e) => setGithubUrl(e.target.value)}
-                  placeholder="https://github.com/username/repository"
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  autoFocus
+                  value={displayUrl}
+                  onChange={(e) => setUrl("https://github.com/" + e.target.value)}
+                  placeholder="owner/repo"
+                  className="url-input"
+                  onKeyDown={(e) => {
+                    if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+                      e.preventDefault();
+                      handleDeploy();
+                    }
+                  }}
                 />
-              </label>
-            </form>
-          ) : (
-            <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
-              <p className="text-sm text-gray-700 mb-2">
-                To deploy a local project, use the DPloy CLI:
-              </p>
-              <code className="block bg-gray-900 text-white px-4 py-3 rounded text-sm font-mono">
-                cd /path/to/your/project<br />
-                dploy deploy
-              </code>
-              <p className="text-xs text-gray-600 mt-3">
-                The CLI will automatically detect your project type and deploy it to a live URL.
-              </p>
-            </div>
-          )}
-        </div>
+                {url && (
+                  <button className="url-clear" onClick={() => setUrl("")} aria-label="Clear URL">
+                    <X size={12} />
+                  </button>
+                )}
+              </div>
+            </label>
 
-        {deploymentType === "github" && (
-          <button
-            onClick={handleDeploy as () => void}
-            disabled={!githubUrl || deploy.isPending}
-            className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white py-3 px-4 rounded-lg transition-colors cursor-pointer"
-          >
-            {deploy.isPending ? "Deploying..." : "Deploy Project"}
-          </button>
+            {/* Recent repos — permission gated */}
+            <div className="field">
+              <span className="field-label">
+                <GithubIcon size={13} /> Recent public repos
+              </span>
+
+              {permission === "ask" && (
+                <div className="perm-card">
+                  <div className="perm-icon"><Key size={18} /></div>
+                  <div>
+                    <div className="perm-title">Show repos from your GitHub account?</div>
+                    <div className="perm-sub">
+                      dploy will read your <span className="mono">public_repo</span> list to show
+                      recent suggestions here. Read-only, nothing is stored.
+                    </div>
+                    <div className="perm-actions">
+                      <button className="btn-ghost" onClick={() => setPermission("denied")}>
+                        Not now
+                      </button>
+                      <button className="btn-primary" onClick={grantPermission}>
+                        <Check size={14} /> Allow
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {permission === "loading" && (
+                <div className="perm-loading">
+                  <span className="mini-spinner" aria-hidden /> Fetching your recent repos…
+                </div>
+              )}
+
+              {permission === "denied" && (
+                <div className="perm-denied">
+                  <span>Suggestions disabled.</span>
+                  <button className="linklike" onClick={() => setPermission("ask")}>
+                    Enable
+                  </button>
+                </div>
+              )}
+
+              {permission === "granted" && (
+                <div className="repo-list">
+                  {recent.map((r) => (
+                    <button
+                      key={r.full}
+                      className={`repo-card ${url.endsWith(r.full) ? "sel" : ""}`}
+                      onClick={() => setUrl("https://github.com/" + r.full)}
+                    >
+                      <div className="repo-card-l">
+                        <GithubIcon size={14} />
+                        <div>
+                          <div className="repo-card-name">{r.full}</div>
+                          <div className="repo-card-desc">{r.desc}</div>
+                        </div>
+                      </div>
+                      <div className="repo-card-r">
+                        <span className={`lang-dot ${LANG_CLS[r.lang] ?? ""}`} />
+                        <span style={{ fontSize: 11.5 }}>{r.lang}</span>
+                        <span style={{ fontSize: 11, fontFamily: "var(--mono)" }}>★ {r.stars.toLocaleString()}</span>
+                        <span style={{ fontSize: 11 }}>{r.updated}</span>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Environment variables */}
+            <div className="field">
+              <button
+                className="env-toggle"
+                onClick={() => setEnvExpanded((e) => !e)}
+                type="button"
+              >
+                <span className="field-label" style={{ margin: 0 }}>
+                  <Key size={13} /> Environment variables
+                </span>
+                <span className="env-opt-badge">optional</span>
+                <span className={`env-chevron ${envExpanded ? "open" : ""}`}>&#8250;</span>
+              </button>
+
+              {envExpanded && (
+                <div className="env-panel">
+                  <div className="env-header">
+                    <span className="env-hint">
+                      Keys are injected at runtime. Values marked secret are stored encrypted.
+                    </span>
+                    <button className="env-paste-btn" onClick={pasteEnvFile} type="button">
+                      <Upload size={12} /> Paste .env
+                    </button>
+                  </div>
+
+                  <div className="env-rows">
+                    {envVars.map((v) => (
+                      <div key={v.id} className="env-row">
+                        <input
+                          className="env-key-input"
+                          value={v.key}
+                          onChange={(e) => updateEnvVar(v.id, "key", e.target.value)}
+                          placeholder="API_KEY"
+                          spellCheck={false}
+                        />
+                        <span className="env-eq">=</span>
+                        <input
+                          className="env-val-input"
+                          value={v.value}
+                          onChange={(e) => updateEnvVar(v.id, "value", e.target.value)}
+                          placeholder="value"
+                          type={v.secret ? "password" : "text"}
+                          spellCheck={false}
+                        />
+                        <button
+                          className={`env-secret-btn ${v.secret ? "is-secret" : ""}`}
+                          onClick={() => toggleSecret(v.id)}
+                          title={v.secret ? "Show value" : "Mark as secret"}
+                          type="button"
+                        >
+                          {v.secret ? <EyeOff size={13} /> : <Eye size={13} />}
+                        </button>
+                        <button
+                          className="env-remove-btn"
+                          onClick={() => removeEnvVar(v.id)}
+                          title="Remove variable"
+                          type="button"
+                        >
+                          <X size={12} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+
+                  <button className="env-add-btn" onClick={addEnvVar} type="button">
+                    <Plus size={13} /> Add variable
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* Deploy button */}
+            <button
+              className="btn-primary-xl deploy-btn"
+              disabled={!url || submitting}
+              onClick={() => handleDeploy()}
+            >
+              {submitting ? (
+                <><span className="spinner-white" aria-hidden /> Starting deployment…</>
+              ) : (
+                <>
+                  <Rocket size={16} /> Deploy
+                  <span className="kbd-inline-white">
+                    <span className="kbd kbd-light">⌘</span>
+                    <span className="kbd kbd-light">⏎</span>
+                  </span>
+                  <span className="btn-shine" aria-hidden />
+                </>
+              )}
+            </button>
+
+            <div className="deploy-foot">
+              Press <span className="kbd">⌘</span><span className="kbd">⏎</span> to deploy
+              <span className="dot-sep">•</span>
+              <span className="kbd">Esc</span> to cancel
+            </div>
+          </Reveal>
+        ) : (
+          <Reveal delay={180} className="add-panel">
+            <div className="cli-steps">
+              <div className="step">
+                <div className="step-num">1</div>
+                <div className="step-body">
+                  <div className="step-title">Install the dploy CLI</div>
+                  <pre className="codeblock">
+                    <span className="prompt">$</span> curl -sL https://dploy.sh/install | sh
+                  </pre>
+                </div>
+              </div>
+              <div className="step">
+                <div className="step-num">2</div>
+                <div className="step-body">
+                  <div className="step-title">Authenticate</div>
+                  <pre className="codeblock">
+                    <span className="prompt">$</span> dploy login
+                  </pre>
+                </div>
+              </div>
+              <div className="step">
+                <div className="step-num">3</div>
+                <div className="step-body">
+                  <div className="step-title">Deploy from any directory</div>
+                  <pre className="codeblock">
+                    <div><span className="prompt">$</span> cd ~/my-project</div>
+                    <div><span className="prompt">$</span> dploy deploy</div>
+                    <div className="cli-out"># uploading 218 files…</div>
+                    <div className="cli-out ok">✓ deployed in 38s → https://my-project.dploy.sh</div>
+                  </pre>
+                </div>
+              </div>
+            </div>
+            <div className="cli-hint">
+              <Terminal size={14} />
+              Auto-detects Node, Python, Go, Rust, Deno, Bun, Docker.
+            </div>
+          </Reveal>
         )}
       </div>
     </div>

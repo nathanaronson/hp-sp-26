@@ -98,6 +98,9 @@ def test_stop_deployment(authed_client: TestClient) -> None:
     )
     deployment_id = create.json()["id"]
 
-    stop = authed_client.delete(f"/api/v1/deployments/{deployment_id}")
-    assert stop.status_code == 200, stop.text
-    assert stop.json()["status"] == "stopped"
+    delete = authed_client.delete(f"/api/v1/deployments/{deployment_id}")
+    assert delete.status_code == 204
+
+    # Verify it's actually gone
+    get = authed_client.get(f"/api/v1/deployments/{deployment_id}")
+    assert get.status_code == 404
