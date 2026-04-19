@@ -28,14 +28,17 @@ import asyncio
 import json
 import logging
 import shlex
+import time
 
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect, status
+from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect, status
+from pydantic import BaseModel
 
 from app.db.session import SessionLocal
 from app.models.deployment import DEPLOYMENT_STATUS_RUNNING, Deployment
 from app.models.user import User
 from app.services.auth import get_session_user
 from app.services.sandbox import Sandbox
+from app.services.terminal_sessions import session_manager
 
 log = logging.getLogger(__name__)
 
@@ -280,3 +283,102 @@ def _read_chunk(stream) -> bytes | None:
     except Exception:
         log.exception("terminal: read error")
         return None
+
+
+# ---------------------------------------------------------------------------
+# SMS terminal interaction — called by photon-backend / Spectrum
+# ---------------------------------------------------------------------------
+
+class TerminalInteractRequest(BaseModel):
+    input: str = ""
+
+
+class TerminalInteractResponse(BaseModel):
+    output: str
+
+
+async def _wait_for_output(
+    session,
+    *,
+    max_wait: float = 10.0,
+    quiet_period: float = 0.5,
+) -> None:
+    """Wait until output stops arriving or max_wait elapses."""
+    start = time.time()
+    last_size = 0
+    last_change = start
+
+    while time.time() - start < max_wait:
+        current_size = session.buffer_size
+        if current_size > last_size:
+            last_size = current_size
+            last_change = time.time()
+        elif current_size > 0 and time.time() - last_change >= quiet_period:
+            break
+        await asyncio.sleep(0.1)
+
+
+@router.post(
+    "/{deployment_id}/terminal/interact",
+    response_model=TerminalInteractResponse,
+)
+async def terminal_interact(
+    deployment_id: str,
+    payload: TerminalInteractRequest,
+) -> TerminalInteractResponse:
+    """Send input to a CLI deployment's terminal and return the output.
+
+    Called by photon-backend for SMS-based terminal interaction.
+    No user auth — this is an internal service endpoint.
+    """
+    dep = await _load_deployment_for_interact(deployment_id)
+
+    session = session_manager.get_session(deployment_id)
+    if session is None:
+        argv = _build_argv(dep, None)
+        if not argv:
+            raise HTTPException(
+                status_code=400, detail="No entrypoint configured"
+            )
+        session = await asyncio.to_thread(
+            session_manager.create_session,
+            deployment_id,
+            dep.sandbox_id,
+            argv,
+        )
+        await _wait_for_output(session, max_wait=3.0, quiet_period=1.0)
+        initial = session.drain_output()
+        if not payload.input:
+            return TerminalInteractResponse(output=initial.strip() or "(session started)")
+
+    if payload.input:
+        await asyncio.to_thread(session.send_input, payload.input)
+
+    await _wait_for_output(session, max_wait=10.0, quiet_period=0.5)
+    output = session.drain_output()
+
+    lines = output.split("\n")
+    cleaned = [
+        line for line in lines
+        if line.strip() != payload.input.strip()
+    ]
+    output = "\n".join(cleaned).strip()
+
+    return TerminalInteractResponse(output=output or "(no output)")
+
+
+async def _load_deployment_for_interact(deployment_id: str) -> Deployment:
+    async with SessionLocal() as db:
+        dep = await db.get(Deployment, deployment_id)
+    if dep is None:
+        raise HTTPException(status_code=404, detail="Deployment not found")
+    if dep.status != DEPLOYMENT_STATUS_RUNNING:
+        raise HTTPException(status_code=409, detail="Deployment is not running")
+    if dep.kind != "cli":
+        raise HTTPException(
+            status_code=400,
+            detail="Only CLI deployments support terminal interaction",
+        )
+    if not dep.sandbox_id:
+        raise HTTPException(status_code=409, detail="No active sandbox")
+    return dep

@@ -9,6 +9,7 @@ const envSchema = z.object({
   CORS_ORIGIN: z.string().default("*"),
   SPECTRUM_PROJECT_ID: z.string(),
   SPECTRUM_PROJECT_SECRET: z.string(),
+  BACKEND_URL: z.string().default("http://localhost:8000"),
 });
 
 export const env = envSchema.parse(process.env);

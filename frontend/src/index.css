@@ -1919,6 +1919,47 @@ input { font-family: inherit; }
 }
 
 /* ============================================================
+   SMS TERMINAL LINK
+   ============================================================ */
+.sms-link-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.sms-input-wrap {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  border: 1px solid var(--ok-border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.sms-input-wrap:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.12);
+}
+.sms-input-icon {
+  padding: 0 0 0 12px;
+  color: var(--ink-faint);
+  display: flex;
+  align-items: center;
+}
+.sms-input {
+  border: none;
+  background: none;
+  outline: none;
+  padding: 10px 14px 10px 8px;
+  font-family: var(--font-mono);
+  font-size: 14px;
+  color: var(--ink);
+  width: 100%;
+}
+.sms-input::placeholder {
+  color: var(--ink-faint);
+}
+
+/* ============================================================
    REDUCED MOTION
    ============================================================ */
 @media (prefers-reduced-motion: reduce) {

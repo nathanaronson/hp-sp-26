@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useMemo } from "react";
 import { useParams, useNavigate, Navigate } from "react-router";
 import {
   ArrowLeft, Globe, Terminal, Copy, Download,
-  ChevronRight, Trash, X, Rocket, ExternalLink, Mail, MessageSquare, Pencil, Check,
+  ChevronRight, Trash, X, Rocket, ExternalLink, Mail, MessageSquare, Pencil, Check, Smartphone,
 } from "lucide-react";
 import { GithubIcon } from "../components/GithubIcon";
 import { toast } from "sonner";
@@ -12,6 +12,9 @@ import { Reveal } from "../components/Reveal";
 import { Nav } from "../components/Nav";
 
 const BUILD_STEPS = ["Clone", "Detect", "Install", "Build", "Package", "Upload", "Route", "Live"];
+
+const PHOTON_URL =
+  (import.meta.env.VITE_PHOTON_URL as string | undefined) ?? "http://localhost:4000";
 
 const MOCK_LOG_LINES = [
   { txt: "$ dploy build --prod", kind: "cmd" },
@@ -41,6 +44,9 @@ export default function DeploymentDetail() {
   const [logsOpen, setLogsOpen] = useState(true);
   const [editing, setEditing] = useState(false);
   const [editName, setEditName] = useState("");
+  const [smsPhone, setSmsPhone] = useState("");
+  const [smsLinked, setSmsLinked] = useState(false);
+  const [smsLinking, setSmsLinking] = useState(false);
   const nameInputRef = useRef<HTMLInputElement>(null);
   const logsRef = useRef<HTMLDivElement>(null);
 
@@ -161,6 +167,45 @@ export default function DeploymentDetail() {
     a.click();
     URL.revokeObjectURL(a.href);
     toast.success("Logs downloaded");
+  };
+
+  const linkSms = async () => {
+    const phone = smsPhone.trim();
+    if (!phone || !id) return;
+    setSmsLinking(true);
+    try {
+      const res = await fetch(`${PHOTON_URL}/api/link-session`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phone, deploymentId: id }),
+      });
+      if (!res.ok) throw new Error("Link failed");
+      setSmsLinked(true);
+      toast.success("SMS terminal linked");
+    } catch {
+      toast.error("Failed to link SMS session");
+    } finally {
+      setSmsLinking(false);
+    }
+  };
+
+  const unlinkSms = async () => {
+    const phone = smsPhone.trim();
+    if (!phone) return;
+    setSmsLinking(true);
+    try {
+      await fetch(`${PHOTON_URL}/api/link-session`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phone }),
+      });
+      setSmsLinked(false);
+      toast.success("SMS terminal unlinked");
+    } catch {
+      toast.error("Failed to unlink SMS session");
+    } finally {
+      setSmsLinking(false);
+    }
   };
 
   // Auth loading
@@ -308,6 +353,62 @@ export default function DeploymentDetail() {
                 </button>
               </div>
             </div>
+          </Reveal>
+        )}
+
+        {/* SMS Terminal Link — CLI deployments only */}
+        {status === "Running" && deployment.kind === "cli" && (
+          <Reveal delay={120} className="banner banner-ok">
+            <div className="banner-top" style={{ marginBottom: smsLinked ? 0 : 12 }}>
+              <div className="banner-title-wrap">
+                <Smartphone size={18} />
+                <div>
+                  <div className="banner-title">
+                    {smsLinked ? "SMS Terminal Active" : "SMS Terminal"}
+                  </div>
+                  <div className="banner-sub">
+                    {smsLinked
+                      ? `Linked to ${smsPhone} — text this number to interact with the terminal`
+                      : "Link your phone to interact with this CLI via text messages"}
+                  </div>
+                </div>
+              </div>
+              {smsLinked && (
+                <button
+                  className="btn-ghost danger-hover"
+                  onClick={unlinkSms}
+                  disabled={smsLinking}
+                >
+                  <X size={14} /> Disconnect
+                </button>
+              )}
+            </div>
+            {!smsLinked && (
+              <div className="sms-link-row">
+                <div className="sms-input-wrap">
+                  <span className="sms-input-icon"><Smartphone size={14} /></span>
+                  <input
+                    className="sms-input"
+                    type="tel"
+                    placeholder="+1 555 123 4567"
+                    value={smsPhone}
+                    onChange={(e) => setSmsPhone(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === "Enter") linkSms(); }}
+                  />
+                </div>
+                <button
+                  className="btn-primary"
+                  onClick={linkSms}
+                  disabled={smsLinking || !smsPhone.trim()}
+                >
+                  {smsLinking ? (
+                    <><span className="spinner-white" aria-hidden /> Linking…</>
+                  ) : (
+                    <><MessageSquare size={14} /> Start</>
+                  )}
+                </button>
+              </div>
+            )}
           </Reveal>
         )}
 
