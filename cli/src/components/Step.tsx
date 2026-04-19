@@ -1,4 +1,5 @@
 import { Box, Text } from "ink";
+import { Spinner } from "@inkjs/ui";
 
 export type StepState = "pending" | "running" | "done" | "failed";
 
@@ -29,7 +30,7 @@ function renderIcon(state: StepState) {
     case "done":
       return <Text color="green">✔</Text>;
     case "running":
-      return <Text color="cyan">…</Text>;
+      return <Spinner />;
     case "failed":
       return <Text color="red">✖</Text>;
     case "pending":
