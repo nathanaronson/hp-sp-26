@@ -6,8 +6,8 @@ type Schema = {
   mock?: boolean;
 };
 
-export const DEFAULT_API_URL = process.env.DPLOY_API_URL ?? "http://localhost:8000";
-const configDir = process.env.DPLOY_CONFIG_DIR;
+export const DEFAULT_API_URL = process.env.dploy_API_URL ?? "http://localhost:8000";
+const configDir = process.env.dploy_CONFIG_DIR;
 
 export const config = new Conf<Schema>({
   projectName: "dploy",

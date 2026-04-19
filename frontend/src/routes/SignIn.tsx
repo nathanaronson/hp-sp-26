@@ -22,13 +22,13 @@ export default function SignIn() {
         <div className="flex items-center justify-center mb-8">
           <img
             src={dployIcon}
-            alt="DPloy"
+            alt="dploy"
             className="w-20 h-20 rounded-2xl shadow-lg logo-hover animate__animated animate__bounceIn"
             style={{ animationDelay: "0.3s" }}
           />
         </div>
         <h1 className="text-3xl text-center mb-2 animate__animated animate__fadeIn" style={{ animationDelay: "0.5s" }}>
-          DPloy
+          dploy
         </h1>
         <p className="text-center text-gray-500 mb-8 animate__animated animate__fadeIn" style={{ animationDelay: "0.6s" }}>
           Deploy your apps in under 1 minute

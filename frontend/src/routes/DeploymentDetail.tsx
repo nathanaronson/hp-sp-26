@@ -74,7 +74,7 @@ export default function DeploymentDetail() {
   const shareViaEmail = () => {
     if (liveUrl) {
       window.open(
-        `mailto:?subject=Check out my deployment&body=I deployed ${name} on DPloy: ${liveUrl}`,
+        `mailto:?subject=Check out my deployment&body=I deployed ${name} on dploy: ${liveUrl}`,
       );
     }
   };
@@ -103,8 +103,8 @@ export default function DeploymentDetail() {
       <div className="border-b bg-white/80 backdrop-blur-sm nav-bar sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3 cursor-pointer" onClick={() => navigate("/dashboard")}>
-            <img src={dployIcon} alt="DPloy" className="w-8 h-8 rounded-lg logo-hover" />
-            <span className="text-xl font-semibold">DPloy</span>
+            <img src={dployIcon} alt="dploy" className="w-8 h-8 rounded-lg logo-hover" />
+            <span className="text-xl font-semibold">dploy</span>
           </div>
           <button
             onClick={() => navigate("/dashboard")}

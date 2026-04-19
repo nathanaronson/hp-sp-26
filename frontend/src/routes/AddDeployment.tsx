@@ -48,8 +48,8 @@ export default function AddDeployment() {
       <div className="border-b bg-white/80 backdrop-blur-sm nav-bar sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3 cursor-pointer" onClick={() => navigate("/dashboard")}>
-            <img src={dployIcon} alt="DPloy" className="w-8 h-8 rounded-lg logo-hover" />
-            <span className="text-xl font-semibold">DPloy</span>
+            <img src={dployIcon} alt="dploy" className="w-8 h-8 rounded-lg logo-hover" />
+            <span className="text-xl font-semibold">dploy</span>
           </div>
           <button
             onClick={() => navigate("/dashboard")}
@@ -114,7 +114,7 @@ export default function AddDeployment() {
           ) : (
             <div className="bg-gray-50 border border-gray-200 rounded-xl p-5 animate__animated animate__fadeIn" style={{ animationDuration: "0.3s" }}>
               <p className="text-sm text-gray-700 mb-3">
-                To deploy a local project, use the DPloy CLI:
+                To deploy a local project, use the dploy CLI:
               </p>
               <code className="block bg-gray-900 text-green-400 px-5 py-4 rounded-lg text-sm font-mono leading-relaxed">
                 <span className="text-gray-500">$</span> cd /path/to/your/project<br />

@@ -77,7 +77,7 @@ const mockUploads = new Map<string, MockUpload>();
 const mockDeployments = new Map<string, MockDeploymentState>();
 
 export function isMockMode(): boolean {
-  return Boolean(config.get("mock")) || process.env.DPLOY_MOCK === "1";
+  return Boolean(config.get("mock")) || process.env.dploy_MOCK === "1";
 }
 
 export function mockResponse(
@@ -152,7 +152,7 @@ function createMockDeployment(body: CreateDeploymentBody): CreateDeploymentRespo
     source: { type: body.source.type, ref },
     createdAt: Date.now(),
     shouldFail:
-      Boolean(body.env?.DPLOY_FAIL === "1") || /fail/i.test(body.name ?? ""),
+      Boolean(body.env?.dploy_FAIL === "1") || /fail/i.test(body.name ?? ""),
   });
 
   return { deploymentId };
