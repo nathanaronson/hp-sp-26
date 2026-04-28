@@ -4,14 +4,14 @@
   "description": "Vercel-style just-deploy-it CLI. Point dploy at a GitHub repo and get a live URL.",
   "type": "module",
   "license": "MIT",
-  "homepage": "https://github.com/nathanaronson/hp-sp-26#readme",
+  "homepage": "https://github.com/nathanaronson/dploy#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/nathanaronson/hp-sp-26.git",
+    "url": "https://github.com/nathanaronson/dploy",
     "directory": "cli"
   },
   "bugs": {
-    "url": "https://github.com/nathanaronson/hp-sp-26/issues"
+    "url": "https://github.com/nathanaronson/dploy/issues"
   },
   "keywords": [
     "deploy",
