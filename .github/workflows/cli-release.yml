@@ -1,191 +1,35 @@
-name: CLI Release
+name: Publish Package
 
-# Builds the dploy CLI into a single self-contained JS bundle and ships it
-# through three channels:
-#
-#   * push to main         -> rolling `nightly` GitHub prerelease (overwrites)
-#   * push of `v*` tag     -> stable GitHub release + `npm publish` to @ryantanen/dploy
-#   * workflow_dispatch    -> uploads workflow artifact only (dry run)
-#
-# npm publish auth: Trusted Publishing (OIDC). Configured on npmjs.com under
-# the package's Settings → Trusted Publishing. The allowed publisher must
-# match this workflow exactly:
-#   - Owner:    nathanaronson
-#   - Repo:     dploy   (or hp-sp-26 if that's still the canonical repo name)
-#   - Workflow: .github/workflows/cli-release.yml
-#   - Env:      <none>
-# No NPM_TOKEN secret is needed — `id-token: write` + a missing auth token
-# triggers npm CLI's auto-OIDC flow (requires npm >= 11.5.1).
-#
-# npm Sigstore provenance requires a *public* GitHub source repo. Keep the
-# repo public or `npm publish --provenance` will fail with E422.
-
-"on":
+on:
   push:
-    branches: [main]
-    tags: ["v*"]
-    paths:
-      - "cli/**"
-      - ".github/workflows/cli-release.yml"
-  workflow_dispatch:
+    tags:
+      - "v*"
 
 permissions:
-  contents: write
-  id-token: write
-
-concurrency:
-  group: cli-release-${{ github.ref }}
-  cancel-in-progress: true
+  id-token: write # Required for OIDC
+  contents: read
 
 jobs:
-  build:
+  publish:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout (cli only)
-        uses: actions/checkout@v4
-        with:
-          sparse-checkout: |
-            cli
-            README.md
-          sparse-checkout-cone-mode: true
+      - uses: actions/checkout@v6
 
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v4
         with:
           version: 9
 
-      - name: Setup Node
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
-          node-version: 20
-          cache: pnpm
-          cache-dependency-path: cli/pnpm-lock.yaml
+          node-version: "24"
+          cache: "pnpm"
+          cache-dependency-path: "cli/pnpm-lock.yaml"
           registry-url: "https://registry.npmjs.org"
-
-      - name: Upgrade npm (for trusted-publisher OIDC)
-        run: npm install -g npm@latest
-
-      - name: Install dependencies
+      - run: pnpm install --frozen-lockfile
         working-directory: cli
-        run: pnpm install --frozen-lockfile
-
-      - name: Build (bundled)
+      - run: pnpm run build --if-present
         working-directory: cli
-        run: pnpm build:bundle
-
-      - name: Smoke test
+      - run: pnpm run test --if-present
         working-directory: cli
-        run: |
-          node dist/cli.js --version
-          node dist/cli.js --help > /dev/null
-
-      - name: Stage publish dir + tarball
-        id: stage
-        run: |
-          set -euo pipefail
-          STAGE="$PWD/stage"
-          mkdir -p "$STAGE/dist" "$STAGE/bin"
-          cp cli/dist/cli.js "$STAGE/dist/cli.js"
-          cp cli/bin/dploy   "$STAGE/bin/dploy"
-          chmod +x "$STAGE/bin/dploy"
-          # Use the repo README as the npm package readme so npmjs.com renders it.
-          cp README.md "$STAGE/README.md" 2>/dev/null || true
-          # Write a clean package.json: drop dependencies (bundled), drop dev
-          # sections + scripts that have no meaning in the published package.
-          node -e '
-            const p = require("./cli/package.json");
-            const out = {
-              name: p.name,
-              version: p.version,
-              description: p.description,
-              type: p.type,
-              license: p.license,
-              homepage: p.homepage,
-              repository: p.repository,
-              bugs: p.bugs,
-              keywords: p.keywords,
-              bin: p.bin,
-              files: ["bin", "dist", "README.md"],
-              engines: p.engines,
-              publishConfig: p.publishConfig
-            };
-            require("fs").writeFileSync(process.argv[1], JSON.stringify(out, null, 2) + "\n");
-          ' "$STAGE/package.json"
-
-          # Tarball for the GitHub Release channel — same content, gzipped.
-          tar -czf dploy.tgz -C "$STAGE" .
-
-          SHA="$(shasum -a 256 dploy.tgz | awk '{print $1}')"
-          SIZE="$(stat -c%s dploy.tgz)"
-          VERSION="$(node -p "require('./cli/package.json').version")"
-          {
-            echo "sha256=$SHA"
-            echo "size=$SIZE"
-            echo "version=$VERSION"
-            echo "stage=$STAGE"
-          } >> "$GITHUB_OUTPUT"
-          {
-            echo "## dploy CLI build"
-            echo ""
-            echo "- npm: \`@ryantanen/dploy@${VERSION}\`"
-            echo "- commit: \`${GITHUB_SHA}\`"
-            echo "- size: ${SIZE} bytes"
-            echo "- sha256: \`${SHA}\`"
-          } > release-notes.md
-
-      - name: Upload workflow artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: dploy-${{ github.sha }}
-          path: dploy.tgz
-          if-no-files-found: error
-
-      - name: Publish nightly (main branch)
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: nightly
-          name: Nightly build
-          prerelease: true
-          target_commitish: ${{ github.sha }}
-          body_path: release-notes.md
-          files: dploy.tgz
-          make_latest: false
-
-      - name: Publish stable GitHub release (v* tag)
-        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
-        uses: softprops/action-gh-release@v2
-        with:
-          generate_release_notes: true
-          body_path: release-notes.md
-          files: dploy.tgz
-          make_latest: true
-
-      - name: Publish to npm (v* tag, trusted publisher OIDC)
-        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
-        working-directory: ${{ steps.stage.outputs.stage }}
-        run: |
-          set -euo pipefail
-          # Sanity: tag must match package version (strip leading "v").
-          TAG_VERSION="${GITHUB_REF_NAME#v}"
-          PKG_VERSION="$(node -p "require('./package.json').version")"
-          if [ "$TAG_VERSION" != "$PKG_VERSION" ]; then
-            echo "::error::tag $GITHUB_REF_NAME does not match package.json version $PKG_VERSION"
-            exit 1
-          fi
-
-          # actions/setup-node@v4 wrote an .npmrc that hardcodes
-          # `_authToken=${NODE_AUTH_TOKEN}`. With trusted publishing we want
-          # npm to detect "no auth token present" and fall through to OIDC,
-          # so strip any registry-auth lines before publishing.
-          for f in "$HOME/.npmrc" "$NPM_CONFIG_USERCONFIG"; do
-            if [ -n "${f:-}" ] && [ -f "$f" ]; then
-              sed -i '/_authToken=/d' "$f" || true
-            fi
-          done
-
-          npm --version
-          # OIDC requires `id-token: write` (set at workflow level) + npm >= 11.5.1.
-          # Trusted Publisher must be configured on npmjs.com matching this
-          # repo + workflow path (see header comment).
-          npm publish --provenance --access public
+      - run: npm publish
+        working-directory: cli
