@@ -27,9 +27,9 @@ jobs:
           registry-url: "https://registry.npmjs.org"
       - run: pnpm install --frozen-lockfile
         working-directory: cli
-      - run: pnpm run build --if-present
+      - run: pnpm run --if-present build
         working-directory: cli
-      - run: pnpm run test --if-present
+      - run: pnpm run --if-present test
         working-directory: cli
       - run: npm publish
         working-directory: cli
