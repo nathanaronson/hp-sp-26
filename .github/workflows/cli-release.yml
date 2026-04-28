@@ -7,13 +7,19 @@ name: CLI Release
 #   * push of `v*` tag     -> stable GitHub release + `npm publish` to @ryantanen/dploy
 #   * workflow_dispatch    -> uploads workflow artifact only (dry run)
 #
-# To enable npm publishing you need ONE of:
-#   a) An automation token from npmjs.com saved as repo secret `NPM_TOKEN`.
-#   b) A trusted publisher configured on npmjs.com that allows this repo +
-#      workflow (no token needed; OIDC).
+# npm publish auth: Trusted Publishing (OIDC). Configured on npmjs.com under
+# the package's Settings → Trusted Publishing. The allowed publisher must
+# match this workflow exactly:
+#   - Owner:    nathanaronson
+#   - Repo:     dploy   (or hp-sp-26 if that's still the canonical repo name)
+#   - Workflow: .github/workflows/cli-release.yml
+#   - Env:      <none>
+# No NPM_TOKEN secret is needed — `id-token: write` + a missing auth token
+# triggers npm CLI's auto-OIDC flow (requires npm >= 11.5.1).
 #
 # npm Sigstore provenance requires a *public* GitHub source repo. Keep the
 # repo public or `npm publish --provenance` will fail with E422.
+
 "on":
   push:
     branches: [main]
@@ -55,6 +61,9 @@ jobs:
           cache: pnpm
           cache-dependency-path: cli/pnpm-lock.yaml
           registry-url: "https://registry.npmjs.org"
+
+      - name: Upgrade npm (for trusted-publisher OIDC)
+        run: npm install -g npm@latest
 
       - name: Install dependencies
         working-directory: cli
@@ -152,11 +161,9 @@ jobs:
           files: dploy.tgz
           make_latest: true
 
-      - name: Publish to npm (v* tag)
+      - name: Publish to npm (v* tag, trusted publisher OIDC)
         if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
         working-directory: ${{ steps.stage.outputs.stage }}
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
           set -euo pipefail
           # Sanity: tag must match package version (strip leading "v").
@@ -166,4 +173,19 @@ jobs:
             echo "::error::tag $GITHUB_REF_NAME does not match package.json version $PKG_VERSION"
             exit 1
           fi
+
+          # actions/setup-node@v4 wrote an .npmrc that hardcodes
+          # `_authToken=${NODE_AUTH_TOKEN}`. With trusted publishing we want
+          # npm to detect "no auth token present" and fall through to OIDC,
+          # so strip any registry-auth lines before publishing.
+          for f in "$HOME/.npmrc" "$NPM_CONFIG_USERCONFIG"; do
+            if [ -n "${f:-}" ] && [ -f "$f" ]; then
+              sed -i '/_authToken=/d' "$f" || true
+            fi
+          done
+
+          npm --version
+          # OIDC requires `id-token: write` (set at workflow level) + npm >= 11.5.1.
+          # Trusted Publisher must be configured on npmjs.com matching this
+          # repo + workflow path (see header comment).
           npm publish --provenance --access public
